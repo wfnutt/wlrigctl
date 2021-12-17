@@ -1,8 +1,8 @@
+use chrono::Local;
+use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::str;
-use chrono::{Local};
-use serde::{Deserialize, Serialize};
 
 pub struct RigCtl {
     pub stream: TcpStream,
@@ -63,11 +63,20 @@ fn main() {
             let timestamp = Local::now().format("%Y/%m/%d %H:%M").to_string();
             //println!("Timestamp: {}", timestamp);
 
-            let radiodata = RadioData {key, radio, frequency, mode, timestamp};
+            let radiodata = RadioData {
+                key,
+                radio,
+                frequency,
+                mode,
+                timestamp,
+            };
             let radiodata_json = serde_json::to_string(&radiodata).unwrap();
 
             let client = reqwest::blocking::Client::new();
-            let resp = client.post("https://cloudlog.rustysoft.de/index.php/api/radio").body(radiodata_json).send();
+            let resp = client
+                .post("https://cloudlog.rustysoft.de/index.php/api/radio")
+                .body(radiodata_json)
+                .send();
 
             println!("{:?}", resp);
         }
