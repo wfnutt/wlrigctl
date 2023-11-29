@@ -4,23 +4,23 @@ use serde_derive::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
-struct Cloudlog {
-    url: String,
-    key: String,
-    identifier: String,
+pub struct Cloudlog {
+    pub url: String,
+    pub key: String,
+    pub identifier: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
-struct Flrig {
-    host: String,
-    port: String,
+pub struct Flrig {
+    pub host: String,
+    pub port: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct Settings {
-    cloudlog: Cloudlog,
+    pub cloudlog: Cloudlog,
     flrig: Flrig,
 }
 
