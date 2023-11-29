@@ -10,8 +10,9 @@ fn main() {
     let rd = RadioData {
         key: settings.cloudlog.key,
         radio: settings.cloudlog.identifier,
-        frequency: String::from("2400170000"),
+        frequency: String::from("14017000"),
         mode: String::from("CW"),
+        power: String::from("5"),
     };
 
     cloudlog::upload(&settings.cloudlog.url, &rd);
