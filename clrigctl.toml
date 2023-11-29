@@ -1,0 +1,11 @@
+# This is an example config file. Please edit it to your needs
+# and place it, for example, in your `$HOME/.config/`
+
+[cloudlog]
+url = "https://cloudlog.example.com"
+key = "clxxxxxxxxxxxxx"
+identifier = "clrigctl"
+
+[flrig]
+host = "127.0.0.1"
+port = "12345"
