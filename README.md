@@ -31,7 +31,7 @@ host = "http://127.0.0.1"
 port = "12345"
 ```
 
-If you want to run clrigctl always in the background, you can copy the example systemd service file `clrigctl.service` to `$HOME/.config/systemd/user/` and adapt it (at least your user name).
+If you want to run clrigctl always in the background, you can copy the example systemd service file `clrigctl.service` to `$HOME/.config/systemd/user/` and adapt it (at least use the correct path to the binary!).
 ```
 [Unit]
 Description=Cloudlog CAT Control
