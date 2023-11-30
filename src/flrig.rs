@@ -63,23 +63,21 @@ fn parse_xml(xml: &str) -> String {
     let mut value = String::new();
 
     loop {
-        let mut found = false;
+        let mut _found = false;
 
         match reader.read_event() {
             Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
-            // exits the loop when reaching end of file
+
             Ok(Event::Eof) => break,
 
             Ok(Event::Start(e)) => match e.name().as_ref() {
-                b"value" => found = true,
+                b"value" => (), //found = true,
                 _ => (),
             },
             Ok(Event::Text(e)) => value = e.unescape().unwrap().to_owned().to_string(),
 
             _ => (),
         }
-        // if we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
-        //buf.clear();
     }
 
     value
