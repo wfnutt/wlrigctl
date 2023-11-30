@@ -7,7 +7,8 @@ authors = ["Martin Brodbeck <dg2smb@darc.de>"]
 [dependencies]
 config = { version = "0.13.4", features = ["yaml"] }
 home = "0.5.5"
-reqwest = { version = "0.11.22", features = ["json","rustls"] }
+quick-xml = { version = "0.31.0", features = ["serde", "serialize"] }
+reqwest = { version = "0.11.22", features = ["json"] }
 serde = { version = "1.0.193", features = ["serde_derive"] }
 serde_derive = "1.0.193"
 tokio = { version = "1.34.0", features = ["full"] }

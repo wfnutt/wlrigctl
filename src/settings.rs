@@ -21,7 +21,7 @@ pub struct Flrig {
 #[allow(unused)]
 pub struct Settings {
     pub cloudlog: Cloudlog,
-    flrig: Flrig,
+    pub flrig: Flrig,
 }
 
 impl Settings {
