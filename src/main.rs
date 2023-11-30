@@ -24,7 +24,10 @@ fn main() {
         let radio_data_new = match flrig::get_radio_data(&settings.flrig.host, &settings.flrig.port)
         {
             Ok(res) => res,
-            Err(_) => continue,
+            Err(_) => {
+                thread::sleep(Duration::from_secs(3));
+                continue;
+            }
         };
 
         if radio_data_current.frequency != radio_data_new.frequency
