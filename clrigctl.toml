@@ -2,11 +2,12 @@
 # and place it, for example, in your `$HOME/.config/`
 
 [cloudlog]
-# Note: URL should end with "/index.php/api/radio"
+# Note: URL should end with "/index.php/api/radio".
 url = "https://cloudlog.example.com/index.php/api/radio"
 key = "clxxxxxxxxxxxxx"
 identifier = "clrigctl"
 
 [flrig]
-host = "127.0.0.1"
+# Note: Do not forget the "http://".
+host = "http://127.0.0.1"
 port = "12345"
