@@ -2,7 +2,8 @@
 # and place it, for example, in your `$HOME/.config/`
 
 [cloudlog]
-url = "https://cloudlog.example.com"
+# Note: URL should end with "/index.php/api/radio"
+url = "https://cloudlog.example.com/index.php/api/radio"
 key = "clxxxxxxxxxxxxx"
 identifier = "clrigctl"
 
