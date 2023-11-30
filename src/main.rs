@@ -42,6 +42,6 @@ fn main() {
             changes_detected = false;
         }
 
-        thread::sleep(Duration::from_secs(1));
+        thread::sleep(Duration::from_secs(3));
     }
 }
