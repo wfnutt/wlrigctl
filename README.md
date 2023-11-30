@@ -13,7 +13,7 @@ Simply clone the git repository, compile it and copy the executable to where you
 $ git clone https://git.rustysoft.de/martin/clrigctl.git
 $ cd clrigctl
 $ cargo build --release
-$ sudo cp target/release/clrigctl ~/.local/bin/
+$  cp target/release/clrigctl ~/.local/bin/
 ```
 
 Copy the example config file `clrigctl.toml` to `$HOME/.config/` and adapt it to your needs.
