@@ -19,10 +19,13 @@ fn main() {
     };
 
     let mut changes_detected = false;
-    
+
     loop {
-        let radio_data_new =
-            flrig::get_radio_data(&settings.flrig.host, &settings.flrig.port).unwrap();
+        let radio_data_new = match flrig::get_radio_data(&settings.flrig.host, &settings.flrig.port)
+        {
+            Ok(res) => res,
+            Err(_) => continue,
+        };
 
         if radio_data_current.frequency != radio_data_new.frequency
             || radio_data_current.mode != radio_data_new.mode
