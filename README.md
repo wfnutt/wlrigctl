@@ -2,6 +2,8 @@
 
 This is a small application which provides CAT support for [Cloudlog](https://github.com/magicbug/Cloudlog). It reads data from [Flrig](http://www.w1hkj.com/) and sends it to your Cloudlog instance.
 
+*Please note: cltigctl is in early development! It works for me but there are certainly features missing and I'm sure it contains many bugs. :)*
+
 ## Supported Platforms
 clrigctl is developed on **Linux** and has not yet been adapted for Windows or other operating systems. Please let me know if you are interested and I could have a look …
 
