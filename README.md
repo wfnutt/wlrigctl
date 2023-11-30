@@ -51,7 +51,7 @@ WantedBy=default.target
 
 After a `systemctl --user daemon-reload` you can enable (and start) the service with `systemctl --user enable --now clrigctl.service`. 
 
-clrigctl is running is then running in the background. It will just do nothing if there is no Flrig instance running. 
+clrigctl then running in the background. It will just do nothing if there is no Flrig instance running. 
 
 ## Feedback welcome
 Any feedback is very welcome. Please let me know whether the program was useful for you or if there are perhaps any suggestions or bugs. You can reach me on Matrix Chat (**@nnmcm:darc.de**), via the Fediverse (**@DG2SMB@social.darc.de**) or just plain old E-Mail [dg2smb@darc.de](mailto:dg2smb@darc.de).
