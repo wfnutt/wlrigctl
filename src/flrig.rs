@@ -20,8 +20,6 @@ pub fn get_radio_data(fl_host: &str, fl_port: &str) -> Result<RadioData, Error> 
     let mode = parse_xml(&mode);
     let power = parse_xml(&power);
 
-    println!("{freq} --- {mode} --- {power}");
-
     let radio_data = RadioData {
         key: String::from(""),
         radio: String::from(""),
