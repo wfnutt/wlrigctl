@@ -12,9 +12,9 @@ pub fn get_radio_data(fl_host: &str, fl_port: &str) -> Result<RadioData, Error> 
 
     let client = reqwest::Client::new();
 
-    let freq = get_value_from_flrig(fl_host, fl_port, &client, &cmd_freq).unwrap();
-    let mode = get_value_from_flrig(fl_host, fl_port, &client, &cmd_mode).unwrap();
-    let power = get_value_from_flrig(fl_host, fl_port, &client, &cmd_power).unwrap();
+    let freq = get_value_from_flrig(fl_host, fl_port, &client, &cmd_freq)?;
+    let mode = get_value_from_flrig(fl_host, fl_port, &client, &cmd_mode)?;
+    let power = get_value_from_flrig(fl_host, fl_port, &client, &cmd_power)?;
 
     let freq = parse_xml(&freq);
     let mode = parse_xml(&mode);
