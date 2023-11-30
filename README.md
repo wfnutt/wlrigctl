@@ -35,8 +35,6 @@ If you want to run clrigctl always in the background, you can copy the example s
 ```
 [Unit]
 Description=Cloudlog CAT Control
-After=syslog.target
-After=network.target
 
 [Service]
 RestartSec=2s
@@ -46,7 +44,7 @@ Restart=always
 #Environment=RUST_LOG=Debug
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
 After a `systemctl --user daemon-reload` you can enable (and start) the service with `systemctl --user enable --now clrigctl.service`. 
