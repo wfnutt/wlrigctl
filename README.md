@@ -16,6 +16,8 @@ $ cargo build --release
 $  cp target/release/clrigctl ~/.local/bin/
 ```
 
+**Alternatively**, you can also download the binary packages that are attached to the releases. I provide them for both, x86_64 as well as aarch64 (Raspberry Pi, 64 bit).
+
 Copy the example config file `clrigctl.toml` to `$HOME/.config/` and adapt it to your needs.
 ```
 # This is an example config file. Please edit it to your needs
