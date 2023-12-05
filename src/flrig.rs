@@ -1,5 +1,6 @@
 use crate::cloudlog::RadioData;
 
+use log::debug;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use reqwest::{self, header::CONTENT_TYPE, Error};
@@ -20,12 +21,14 @@ pub fn get_radio_data(fl_host: &str, fl_port: &str) -> Result<RadioData, Error> 
     let mode = parse_xml(&mode);
     let power = parse_xml(&power);
 
+    debug!("freq: {freq} --- mode: {mode} --- power: {power}");
+
     let radio_data = RadioData {
         key: String::from(""),
         radio: String::from(""),
         frequency: freq,
-        mode: mode,
-        power: power,
+        mode,
+        power,
     };
 
     Ok(radio_data)

@@ -3,11 +3,16 @@ mod flrig;
 mod settings;
 
 use std::{thread, time::Duration};
+use log::debug;
 
 use crate::cloudlog::RadioData;
 use settings::Settings;
 
 fn main() {
+    env_logger::init();
+
+    debug!("clrigctl started.\n");
+
     let settings = Settings::new().expect("Could not read settings.");
 
     let mut radio_data_current = RadioData {
