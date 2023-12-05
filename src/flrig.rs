@@ -28,7 +28,7 @@ pub fn get_radio_data(fl_host: &str, fl_port: &str) -> Result<RadioData, Error> 
         radio: String::from(""),
         frequency: freq,
         mode,
-        power,
+        //power,
     };
 
     Ok(radio_data)

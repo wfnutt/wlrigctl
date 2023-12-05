@@ -23,8 +23,6 @@ Copy the example config file `clrigctl.toml` to `$HOME/.config/` and adapt it to
 # This is an example config file. Please edit it to your needs
 # and place it, for example, in your `$HOME/.config/`
 
-power = "5"   # Output power in W 
-
 [cloudlog]
 # Note: URL should end with "/index.php/api/radio".
 url = "https://cloudlog.example.com/index.php/api/radio"

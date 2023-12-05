@@ -22,7 +22,7 @@ pub struct Flrig {
 pub struct Settings {
     pub cloudlog: Cloudlog,
     pub flrig: Flrig,
-    pub power: String,
+    //pub power: String,
 }
 
 impl Settings {

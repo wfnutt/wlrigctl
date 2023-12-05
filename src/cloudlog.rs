@@ -7,7 +7,7 @@ pub struct RadioData {
     pub radio: String,
     pub frequency: String,
     pub mode: String,
-    pub power: String,
+    //pub power: String,
 }
 
 #[tokio::main]

@@ -23,7 +23,7 @@ fn main() {
         radio: settings.cloudlog.identifier,
         frequency: String::from(""),
         mode: String::from(""),
-        power: String::from(&settings.power),
+        //power: String::from(&settings.power),
     };
 
     let mut changes_detected = false;
