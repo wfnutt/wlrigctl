@@ -9,7 +9,7 @@ use std::result::Result;
 pub fn get_radio_data(fl_host: &str, fl_port: &str) -> Result<RadioData, Error> {
     let cmd_freq = "rig.get_vfo";
     let cmd_mode = "rig.get_mode";
-    let cmd_power = "rig.get_power";
+    let cmd_power = "rig.get_power"; // Currently not used.
 
     let client = reqwest::Client::new();
 
@@ -21,7 +21,7 @@ pub fn get_radio_data(fl_host: &str, fl_port: &str) -> Result<RadioData, Error> 
     let mode = parse_xml(&mode);
     let power = parse_xml(&power);
 
-    debug!("freq: {freq} --- mode: {mode} --- power: {power}");
+    debug!("freq: {freq} --- mode: {mode} --- power: {power} (unused)");
 
     let radio_data = RadioData {
         key: String::from(""),

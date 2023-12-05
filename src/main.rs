@@ -2,8 +2,8 @@ mod cloudlog;
 mod flrig;
 mod settings;
 
-use std::{thread, time::Duration};
 use log::debug;
+use std::{process, thread, time::Duration};
 
 use crate::cloudlog::RadioData;
 use settings::Settings;
@@ -13,14 +13,17 @@ fn main() {
 
     debug!("clrigctl started.\n");
 
-    let settings = Settings::new().expect("Could not read settings.");
+    let settings = Settings::new().unwrap_or_else(|err| {
+        eprintln!("Could not read settings: {}", err);
+        process::exit(1)
+    });
 
     let mut radio_data_current = RadioData {
         key: settings.cloudlog.key,
         radio: settings.cloudlog.identifier,
-        frequency: String::from("14017000"),
-        mode: String::from("CW"),
-        power: String::from("5"),
+        frequency: String::from(""),
+        mode: String::from(""),
+        power: String::from(&settings.power),
     };
 
     let mut changes_detected = false;
@@ -37,12 +40,12 @@ fn main() {
 
         if radio_data_current.frequency != radio_data_new.frequency
             || radio_data_current.mode != radio_data_new.mode
-            || radio_data_current.power != radio_data_new.power
+        //|| radio_data_current.power != radio_data_new.power
         {
             changes_detected = true;
             radio_data_current.frequency = radio_data_new.frequency;
             radio_data_current.mode = radio_data_new.mode;
-            radio_data_current.power = radio_data_new.power;
+            //radio_data_current.power = radio_data_new.power;
         }
 
         if changes_detected {
