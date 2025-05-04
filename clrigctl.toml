@@ -1,13 +1,30 @@
 # This is an example config file. Please edit it to your needs
 # and place it, for example, in your `$HOME/.config/`
 
+[performance]
+# interval is in milliseconds
+interval = 1000
+
+# Used to push data from flrig towards cloudlog or wavelog
 [cloudlog]
 # Note: URL should end with "/index.php/api/radio".
 url = "https://cloudlog.example.com/index.php/api/radio"
 key = "clxxxxxxxxxxxxx"
-identifier = "clrigctl"
+identifier = "my-radio-model"
 
+# Used to retrieve data from the radio, to supply live VFO freq to QSO window
 [flrig]
-# Note: Do not forget the "http://".
+# NOTE: Do not forget the "http://".
 host = "http://127.0.0.1"
 port = "12345"
+# In Watts; needed to scale 0-100 from FLRig into Watts for Wavelog QSO
+# It would be nice if we could reliably query all radios for max. power, but...
+maxpower = "10"
+
+# This is the reverse direction from wavelog, when a user clicks a callsign on
+# the bandmap and we want to qsy to that frequency.
+# NOTE: NO "http://" prefix here
+[CAT]
+host = "127.0.0.1"
+port = "54321"
+

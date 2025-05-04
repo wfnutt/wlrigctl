@@ -1,4 +1,4 @@
-use reqwest::Client;
+use reqwest::{Client, Error};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -7,15 +7,16 @@ pub struct RadioData {
     pub radio: String,
     pub frequency: String,
     pub mode: String,
-    //pub power: String,
+    pub power: String,
 }
 
-#[tokio::main]
-pub async fn upload(url: &str, radio_data: &RadioData) {
-    let _res = Client::new()
-        .post(url)
+pub async fn upload(url: &str, radio_data: &RadioData) -> Result<(), Error> {
+    let client = Client::new();
+
+    client.post(url)
         .json(&radio_data)
         .send()
-        .await
-        .unwrap();
+        .await?;
+
+    Ok(())
 }
