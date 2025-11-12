@@ -1,6 +1,7 @@
 mod cloudlog;
 mod flrig;
 mod settings;
+mod wsjtx;
 
 use std::sync::Arc;
 
@@ -10,6 +11,7 @@ use std::str::FromStr;
 
 use crate::cloudlog::RadioData;
 use crate::flrig::Mode;
+use crate::wsjtx::wsjtx_rxloop;
 use settings::Settings;
 use url::Url;
 
@@ -26,6 +28,8 @@ pub type HttpResponse = Response<Full<Bytes>>;
 use std::convert::Infallible;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
+
+use std::{net::{UdpSocket}}; // XXX: prolly clash with tokio??
 
 use tokio::time::Duration;
 
@@ -181,7 +185,7 @@ async fn qsy(
                                format!("Failed to set mode: {e}")))
     }
 
-    let success: String = format!("QSY to {freq}Hz, mode:{mode:?}").into();
+    let success: String = format!("QSY to {freq}Hz, mode:{mode:?}");
     Ok(Response::new(Full::new(Bytes::from(success))))
 }
 
@@ -242,7 +246,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
                     // if attempt to push VFO info to cloudlog fails this time,
                     // maybe the failure might be transient, and we should try next time
-                    let _result = cloudlog::upload(&settings.cloudlog.url, &radio_data_current)
+                    let _result = cloudlog::upload_live_radio_data(&settings.cloudlog.url,
+                                                                   &radio_data_current)
                         .await;
                 }
             } else if let Err(e) = rig_poll.get_radio_data().await {
@@ -252,11 +257,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     });
 
+    // Separate thread for someone logging from WSJTX via UDP on port 2237
+    tokio::task::spawn(async move {
+        let socket = UdpSocket::bind("127.0.0.1:2237");
+        match socket {
+            Err(_) => println!("couldn't create socket"),
+            Ok(socket) => wsjtx_rxloop(socket).await,
+        }
+    });
+
     // Listen on TCP socket for someone in Cloudlog/Wavelog clicking the bandmap
     let cat_ipv4: IpAddr = settings.CAT.host
         .trim()
         .parse()
-        .expect(&format!("Invalid IP address in settings.CAT.host: {}", settings.CAT.host));
+        .unwrap_or_else(|_| panic!("Invalid IP address in settings.CAT.host: {}", settings.CAT.host));
     let cat_port: u16 = settings.CAT.port
         .parse()
         .expect("Invalid port number in settings.CAT.port");

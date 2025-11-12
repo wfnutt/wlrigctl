@@ -19,6 +19,8 @@ http-body-util = "0.1"
 hyper-util = { version = "0.1", features = ["full"] }
 dxr_client = { version = "0.7.1", features = ["reqwest"] }
 url = "2"
+serde_json = "1.0.145"
+bincode2 = "2.0.1"
 
 [profile.release]
 strip = "symbols"

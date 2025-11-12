@@ -50,8 +50,8 @@ impl FLRig {
     pub fn new(url: Url, maxwatts: u32) -> FLRig {
         let client: Client = ClientBuilder::new(url).build();
         FLRig {
-            maxwatts: maxwatts,
-            client: client,
+            maxwatts,
+            client,
         }
     }
 
@@ -115,7 +115,7 @@ impl FLRig {
         freq_hz: f64
     ) -> Result<(), ClientError> {
 
-        let _response: String = self.client.call("rig.set_vfo", freq_hz as f64).await?;
+        let _response: String = self.client.call("rig.set_vfo", freq_hz).await?;
 
         Ok(())
     }
