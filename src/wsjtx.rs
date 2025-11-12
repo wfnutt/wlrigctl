@@ -11,6 +11,8 @@ const WSJTX_MAGIC: u32 = 0xadbccbda;
 const SZ_HDR: usize = 12; // bytes of initial header
 
 
+// XXX: Needs tidying to explicitly specify size of the discriminator.
+// XXX: Also make the enum just a set of structs which define each message individually...
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 #[repr(C)]
 pub enum WSJTXMsg {
@@ -222,6 +224,7 @@ pub async fn wsjtx_rxloop(socket: UdpSocket) {
             Ok((amt, src)) => rxhandler(&buf[0..amt], src).await,
             Err(e) => {
                 println!("Error: {}", e);
+                // XXX: duration of delay probably also needs to be from settings somehow
                 thread::sleep(Duration::from_secs(3));
             },
         }

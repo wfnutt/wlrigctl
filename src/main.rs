@@ -258,6 +258,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     // Separate thread for someone logging from WSJTX via UDP on port 2237
+    // XXX: The address here needs to come from settings...
     tokio::task::spawn(async move {
         let socket = UdpSocket::bind("127.0.0.1:2237");
         match socket {
