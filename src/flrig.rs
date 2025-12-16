@@ -9,11 +9,12 @@ use url::Url;
 pub struct FLRig {
     maxwatts: u32,
     client: Client,
+    identifier: String,
 }
 
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Mode {
     LSB,
     USB,
@@ -47,11 +48,12 @@ impl fmt::Display for Mode {
 }
 
 impl FLRig {
-    pub fn new(url: Url, maxwatts: u32) -> FLRig {
+    pub fn new(url: Url, maxwatts: u32, identifier: String) -> FLRig {
         let client: Client = ClientBuilder::new(url).build();
         FLRig {
             maxwatts,
             client,
+            identifier,
         }
     }
 
@@ -127,7 +129,29 @@ impl FLRig {
 
         let _response: i32 = self.client.call("rig.set_mode", mode.to_string()).await?;
 
+        if mode == Mode::CW && self.identifier == "IC-703" {
+            info!("Bodging narrow filter on IC-703");
+            self.set_narrow().await?; // bodge in an attempt to re-enable narrow filter
+        }
+
         Ok(())
+    }
+
+    pub async fn set_narrow(
+        &self,
+    ) -> Result<(), ClientError> {
+
+        let _response: i32 = self.client.call("rig.set_bw", 1).await?;
+
+        Ok(())
+    }
+
+    // Read back the string identifier, supplied in the .toml config file
+    pub fn get_identifier(
+        &self,
+    ) -> String {
+
+        self.identifier.clone()
     }
 }
 

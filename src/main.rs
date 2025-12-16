@@ -19,6 +19,7 @@ use std::net::{IpAddr, SocketAddr};
 
 use http_body_util::Full;
 use hyper::body::{Bytes, Incoming};
+use hyper::header::CONTENT_TYPE;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
@@ -37,7 +38,10 @@ use tokio::time::Duration;
 enum WavelogMode {
     Cw,
     Phone,
+    LSB,
+    USB,
     Digi,
+    Rtty,
 }
 
 impl FromStr for WavelogMode {
@@ -47,7 +51,10 @@ impl FromStr for WavelogMode {
         match s {
             "cw" => Ok(WavelogMode::Cw),
             "phone" => Ok(WavelogMode::Phone),
+            "lsb" => Ok(WavelogMode::LSB),
+            "usb" => Ok(WavelogMode::USB),
             "digi" => Ok(WavelogMode::Digi),
+            "rtty" => Ok(WavelogMode::Rtty),
             _ => Err(()),
         }
     }
@@ -153,7 +160,10 @@ fn wavelog_bandlist_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
             } else {
                 Mode::USB
             },
+            WavelogMode::LSB => Mode::LSB,
+            WavelogMode::USB => Mode::USB,
             WavelogMode::Digi => Mode::RTTY,
+            WavelogMode::Rtty => Mode::RTTY,
         }
     }
 }
@@ -185,8 +195,30 @@ async fn qsy(
                                format!("Failed to set mode: {e}")))
     }
 
-    let success: String = format!("QSY to {freq}Hz, mode:{mode:?}");
-    Ok(Response::new(Full::new(Bytes::from(success))))
+    let body = format!(
+r#"{{
+    "status": "ok",
+    "connected": true,
+    "frequency": {},
+    "mode": "{}",
+    "rig": "{}"
+}}
+"#,
+        freq,
+        mode,
+        rig.get_identifier(),
+    );
+
+    Ok(
+        Response::builder()
+            .status(200)
+            .header(CONTENT_TYPE, "application/json")
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            .header("Access-Control-Allow-Headers", "Content-Type")
+            .body(Full::new(Bytes::from(body)))
+            .unwrap()
+    )
 }
 
 #[tokio::main]
@@ -200,9 +232,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         process::exit(1)
     });
 
+    let radio: String = settings.cloudlog.identifier;
+
     let mut radio_data_current = RadioData {
         key: settings.cloudlog.key,
-        radio: settings.cloudlog.identifier,
+        radio: radio.clone(),
         frequency: String::from(""),
         mode: String::from(""),
         power: String::from("0"),
@@ -219,7 +253,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let rig = Arc::new(flrig::FLRig::new(
         url,
-        maxpower
+        maxpower,
+        radio,
     ));
 
     let rig_poll = rig.clone(); // clone Arc, not the underlying rig
@@ -276,6 +311,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .parse()
         .expect("Invalid port number in settings.CAT.port");
     let addr = SocketAddr::from((cat_ipv4, cat_port));
+
+    info!("CLRigCtl listening for CAT on: {:#?}", addr);
+
     let listener = TcpListener::bind(addr).await?;
 
     loop {
