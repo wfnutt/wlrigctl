@@ -1,8 +1,8 @@
 [package]
-name = "clrigctl"
+name = "wlrigctl"
 version = "0.2.0"
 edition = "2021"
-authors = ["Martin Brodbeck <dg2smb@darc.de>"]
+authors = ["Martin Brodbeck <dg2smb@darc.de>", "wfnutt <33999718+wfnutt@users.noreply.github.com>"]
 
 [dependencies]
 config = { version = "0.13.4", features = ["yaml"] }

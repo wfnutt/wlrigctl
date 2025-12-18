@@ -4,7 +4,16 @@ use std::fmt::Display;
 use serde::{Serialize, Deserialize};
 use serde_json::json;
 use bincode2::LengthOption::U32;
-use crate::cloudlog::upload_wsjtx_qso_data;
+use log::info;
+use crate::wavelog::upload_wsjtx_qso_data;
+
+// Settings from config file
+#[derive(Debug, Deserialize)]
+pub struct WsjtxSettings {
+    pub host: String,
+    pub port: u16,
+    pub err_timeout: u64,
+}
 
 const SZ_RXBUF: usize = 1500; // close enough for a typical Ethernet MTU
 const WSJTX_MAGIC: u32 = 0xadbccbda;
@@ -186,6 +195,7 @@ pub async fn decode_hdr(buf: &[u8]) -> Result<(), WSJTXError> {
                 //WSJTXMsg::Heartbeat { .. } => { println!("heartbeat"); Ok(())},
                 //WSJTXMsg::Status { .. } => { println!("status"); Ok(())},
                 //WSJTXMsg::Decode { .. } => {println!("decode"); Ok(())},
+                // XXX: Obtain these key params from the settings file
                 WSJTXMsg::LoggedADIF {id: _, adif_text} => {
                     let json_data = json!({
                         "key": "wl678c05df0eb29",
@@ -193,6 +203,7 @@ pub async fn decode_hdr(buf: &[u8]) -> Result<(), WSJTXError> {
                         "type": "adif",
                         "string": adif_text
                     });
+                    // XXX: Obtain these key params from the settings file
                     match upload_wsjtx_qso_data("http://localhost/api/qso", &json_data).await {
                         Ok(_) => Ok(()),
                         Err(_) => Err(WSJTXError::QSOUploadFailed("upload failure".to_string())),
@@ -216,7 +227,7 @@ async fn rxhandler(rxdata: &[u8], _src: SocketAddr) {
     }
 }
 
-pub async fn wsjtx_rxloop(socket: UdpSocket) {
+async fn wsjtx_rxloop(socket: UdpSocket, err_timeout: u64) {
     loop {
         let mut buf = [0; SZ_RXBUF];
 
@@ -224,9 +235,20 @@ pub async fn wsjtx_rxloop(socket: UdpSocket) {
             Ok((amt, src)) => rxhandler(&buf[0..amt], src).await,
             Err(e) => {
                 println!("Error: {}", e);
-                // XXX: duration of delay probably also needs to be from settings somehow
-                thread::sleep(Duration::from_secs(3));
+                thread::sleep(Duration::from_secs(err_timeout));
             },
         }
     }
+}
+
+pub fn wsjtx_thread(host: String, port: u16, err_timeout: u64) {
+    let url = format!("{host}:{port}");
+    info!("Listening for WSJTX QSO logs on: {url}");
+    tokio::task::spawn(async move {
+        let socket = UdpSocket::bind(url);
+        match socket {
+            Err(e) => println!("couldn't create socket for WSJTX QSO logging: {e}"),
+            Ok(socket) => wsjtx_rxloop(socket, err_timeout).await,
+        }
+    });
 }

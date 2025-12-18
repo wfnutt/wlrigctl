@@ -1,4 +1,4 @@
-use crate::cloudlog::RadioData;
+use crate::wavelog::RadioData;
 use log::{info};
 use std::result::Result;
 use std::fmt;
@@ -10,6 +10,7 @@ pub struct FLRig {
     maxwatts: u32,
     client: Client,
     identifier: String,
+    cwbandwidth: Option<u32>,
 }
 
 #[allow(dead_code)]
@@ -48,12 +49,13 @@ impl fmt::Display for Mode {
 }
 
 impl FLRig {
-    pub fn new(url: Url, maxwatts: u32, identifier: String) -> FLRig {
+    pub fn new(url: Url, maxwatts: u32, identifier: String, cwbandwidth: Option<u32>) -> FLRig {
         let client: Client = ClientBuilder::new(url).build();
         FLRig {
             maxwatts,
             client,
             identifier,
+            cwbandwidth,
         }
     }
 
@@ -127,11 +129,26 @@ impl FLRig {
         mode: Mode
     ) -> Result<(), ClientError> {
 
-        let _response: i32 = self.client.call("rig.set_mode", mode.to_string()).await?;
+        // rather than glitch the radio, if the required mode is already in effect, leave it alone!
+        // This matters because if we're already in a mode with a reduced bandwidth or filter,
+        // the rig is nice and quiet. If we peturb the mode, flrig will set a wider bandwidth
+        // on IC-703, then a split-second later we apply our cwbandwidth option to put the filter
+        // back in place. This causes a noticeable audio disturbance which is distracting.
+        //
+        // Maybe we could lose the cwbandwidth feature entirely, and just use this hysteresis
+        // to not mess with a mode that was already correct?
+        let existing_mode = self.get_mode().await?;
+        if mode.to_string() == existing_mode { // XXX: This shouldn't be a string compare...
+            // we're done
+            return Ok(())
+        }
 
-        if mode == Mode::CW && self.identifier == "IC-703" {
-            info!("Bodging narrow filter on IC-703");
-            self.set_narrow().await?; // bodge in an attempt to re-enable narrow filter
+        let _response: i32 = self.client.call("rig.set_mode", mode.to_string()).await?;
+        if let Some(cwbandwidth) = self.cwbandwidth {
+            if mode == Mode::CW {
+                info!("Bodging narrow filter on IC-703");
+                self.set_narrow(cwbandwidth as i32).await?;
+            }
         }
 
         Ok(())
@@ -139,9 +156,10 @@ impl FLRig {
 
     pub async fn set_narrow(
         &self,
+        cwbandwidth: i32
     ) -> Result<(), ClientError> {
 
-        let _response: i32 = self.client.call("rig.set_bw", 1).await?;
+        let _response: i32 = self.client.call("rig.set_bw", cwbandwidth).await?;
 
         Ok(())
     }

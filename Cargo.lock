@@ -167,28 +167,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clrigctl"
-version = "0.2.0"
-dependencies = [
- "bincode2",
- "config",
- "dxr_client",
- "env_logger",
- "home",
- "http-body-util",
- "hyper 1.6.0",
- "hyper-util",
- "log",
- "quick-xml 0.31.0",
- "reqwest 0.11.22",
- "serde",
- "serde_derive",
- "serde_json",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "config"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2277,6 +2255,28 @@ checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
 dependencies = [
  "cfg-if",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "wlrigctl"
+version = "0.2.0"
+dependencies = [
+ "bincode2",
+ "config",
+ "dxr_client",
+ "env_logger",
+ "home",
+ "http-body-util",
+ "hyper 1.6.0",
+ "hyper-util",
+ "log",
+ "quick-xml 0.31.0",
+ "reqwest 0.11.22",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tokio",
+ "url",
 ]
 
 [[package]]

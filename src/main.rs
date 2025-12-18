@@ -1,21 +1,11 @@
-mod cloudlog;
-mod flrig;
-mod settings;
-mod wsjtx;
-
+use std::convert::Infallible;
+use std::process;
+use std::net::{IpAddr, SocketAddr};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use log::{debug, info};
-use std::process;
-use std::str::FromStr;
-
-use crate::cloudlog::RadioData;
-use crate::flrig::Mode;
-use crate::wsjtx::wsjtx_rxloop;
-use settings::Settings;
 use url::Url;
-
-use std::net::{IpAddr, SocketAddr};
 
 use http_body_util::Full;
 use hyper::body::{Bytes, Incoming};
@@ -23,16 +13,23 @@ use hyper::header::CONTENT_TYPE;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
 
 pub type HttpResponse = Response<Full<Bytes>>;
 
-use std::convert::Infallible;
-use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
-
-use std::{net::{UdpSocket}}; // XXX: prolly clash with tokio??
-
 use tokio::time::Duration;
+
+mod wavelog;
+mod flrig;
+mod settings;
+mod wsjtx;
+
+// XXX: Why do some of these have crate:: on the front, but settings doesn't?
+use wavelog::RadioData;
+use flrig::Mode;
+use wsjtx::wsjtx_thread;
+use settings::Settings;
 
 #[derive(Copy, Clone, Debug)]
 enum WavelogMode {
@@ -49,17 +46,19 @@ impl FromStr for WavelogMode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "cw" => Ok(WavelogMode::Cw),
+            "cw"    => Ok(WavelogMode::Cw),
             "phone" => Ok(WavelogMode::Phone),
-            "lsb" => Ok(WavelogMode::LSB),
-            "usb" => Ok(WavelogMode::USB),
-            "digi" => Ok(WavelogMode::Digi),
-            "rtty" => Ok(WavelogMode::Rtty),
-            _ => Err(()),
+            "lsb"   => Ok(WavelogMode::LSB),
+            "usb"   => Ok(WavelogMode::USB),
+            "digi"  => Ok(WavelogMode::Digi),
+            "rtty"  => Ok(WavelogMode::Rtty),
+            _       => Err(()),
         }
     }
 }
 
+// XXX: Behaviour here needs unit tests.
+//
 // If dial frequency is between any of these and +3kHz, then mode should probably be set for FT8
 // 160m: 1.840 MHz
 // 80m: 3.575 MHz
@@ -225,17 +224,19 @@ r#"{{
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     env_logger::init();
 
-    info!("clrigctl started with prototype Power and BandList support.\n");
+    let appname = env!("CARGO_PKG_NAME");
+
+    info!("{appname} started with power, WSJTX QSO and Wavelog cluster click-to-tune support.\n");
 
     let settings = Settings::new().unwrap_or_else(|err| {
         eprintln!("Could not read settings: {err}");
         process::exit(1)
     });
 
-    let radio: String = settings.cloudlog.identifier;
+    let radio: String = settings.wavelog.identifier;
 
     let mut radio_data_current = RadioData {
-        key: settings.cloudlog.key,
+        key: settings.wavelog.key,
         radio: radio.clone(),
         frequency: String::from(""),
         mode: String::from(""),
@@ -250,11 +251,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eprintln!("maxpower must be a positive integer: {err}");
         process::exit(1)
     });
+    let cwbandwidth: Option<u32> = settings.flrig.cwbandwidth;
 
     let rig = Arc::new(flrig::FLRig::new(
         url,
         maxpower,
         radio,
+        cwbandwidth,
     ));
 
     let rig_poll = rig.clone(); // clone Arc, not the underlying rig
@@ -279,9 +282,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     radio_data_current.mode = radio_data_new.mode;
                     radio_data_current.power = radio_data_new.power;
 
-                    // if attempt to push VFO info to cloudlog fails this time,
+                    // if attempt to push VFO info to wavelog fails this time,
                     // maybe the failure might be transient, and we should try next time
-                    let _result = cloudlog::upload_live_radio_data(&settings.cloudlog.url,
+                    let _result = wavelog::upload_live_radio_data(&settings.wavelog.url,
                                                                    &radio_data_current)
                         .await;
                 }
@@ -293,14 +296,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     // Separate thread for someone logging from WSJTX via UDP on port 2237
-    // XXX: The address here needs to come from settings...
-    tokio::task::spawn(async move {
-        let socket = UdpSocket::bind("127.0.0.1:2237");
-        match socket {
-            Err(_) => println!("couldn't create socket"),
-            Ok(socket) => wsjtx_rxloop(socket).await,
-        }
-    });
+    wsjtx_thread(settings.WSJTX.host, settings.WSJTX.port, settings.WSJTX.err_timeout);
 
     // Listen on TCP socket for someone in Cloudlog/Wavelog clicking the bandmap
     let cat_ipv4: IpAddr = settings.CAT.host
@@ -312,7 +308,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .expect("Invalid port number in settings.CAT.port");
     let addr = SocketAddr::from((cat_ipv4, cat_port));
 
-    info!("CLRigCtl listening for CAT on: {:#?}", addr);
+    info!("Listening for CAT on: {:#?}", addr);
 
     let listener = TcpListener::bind(addr).await?;
 
