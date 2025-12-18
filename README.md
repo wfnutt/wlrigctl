@@ -1,62 +1,93 @@
-# clrigctl
+# wlrigctl
 
-This is a small application which provides CAT support for [Cloudlog](https://github.com/magicbug/Cloudlog). It reads data from [Flrig](http://www.w1hkj.com/) and sends it to your Cloudlog instance.
+Wavelog Rig Control, Copyright (C) 2025 William Nutt, M7CLG.
 
-*Please note: clrigctl is in early development! It works for me but there are certainly features missing and I'm sure it contains many bugs. :)*
+Based upon clrigctl v0.2.0, Copyright (C) 2023 Martin Brodbeck, DG2SMB.
 
-## Supported Platforms
-clrigctl is developed on **Linux** and has not yet been adapted for Windows or other operating systems. Please let me know if you are interested and I could have a look …
+## History
+This is a fork of clrigctl v0.2.0, Copyright (C) 2023 Martin Brodbeck, DG2SMB.
 
-## Installation
-Simply clone the git repository, compile it and copy the executable to where you want it to be, for example:
+It has been adapted for Wavelog v2.2.1.
+
+I first started tinkering with Martin's v0.2.0 clrigctl code when I was trying
+out 2E0SQL's Cloudlog logging application. One of the features I missed from
+CQRLog was the ability to capture QSOs from WSJT-X.
+
+Then I found Wavelog, and noticed that clrigctl also worked with it.
+
+"WavelogGate" appeared shortly after, but the notion of a web-y rig control app
+offended my sensibilities; I wanted a low-overhead,
+always-running-when-I'm-logged-in daemon, not something with a UI.
+
+I also don't need to mess about with certs; I just want something running
+locally, on the same machine as wavelog, flrig, wsjtx. The machine is behind a
+firewall, and I only need to listen on 127.0.0.1.
+
+Fiddling about with this little bit of glue code has given me an excuse to try
+Rust and decode UDP packets from WSJT-X, which is a surprisingly powerful
+feature (you can send UDP datagrams in the reverse direction too...).
+
+I make no warranty that the Rust code is idiomatic, or indeed any good(!)
+If you have an IC-703 with a narrow CW filter, you're in luck because that's
+the rig wlrigctl was developed against.
+
+The eventual goal is to migrate the logging at the club (BADARC) to Wavelog.
+
+
+73 de Bill M7CLG
+
+## Use cases
+1. Sending current rig frequency and power level to the Live QSO dialog in
+   Wavelog, just as clrigctl 0.2.0 did.
+
+2. Capturing a QSO from WSJTX, and inserting it automatically into Wavelog
+
+3. Gatewaying clicks in the Wavelog cluster view through to flrig CAT control so
+   that your rig tunes to the band and frequency required.
+
+## Building
+
+This software only works on Linux. It might one day be ported to *BSD.
+
+_Windows* and MacOS* will never be supported. Stop using them._
+
+It's Rust, so build from source:
+
 ```
-$ git clone https://git.rustysoft.de/martin/clrigctl.git
-$ cd clrigctl
-$ cargo build --release
-$  cp target/release/clrigctl ~/.local/bin/
+$ git clone -b main --single-branch --no-tags \
+            https://github.com/wfnutt/wlrigctl.git
+$ cd wlrigctl
+$ cargo install cargo-deb
+$ cargo deb
 ```
 
-**Alternatively**, you can also download the binary packages that are attached to the releases. I provide them for both, x86_64 as well as aarch64 (Raspberry Pi, 64 bit).
+_OPTION: take target/debian/wlrigctl.deb to your radio club..._
 
-Copy the example config file `clrigctl.toml` to `$HOME/.config/` and adapt it to your needs.
+## Installing
+
+The build process created a .deb package, which should be usable on plenty of
+flavours of Linux. The daemon will run as you rather than root, so copy the
+example config file for the daemon.
+
 ```
-# This is an example config file. Please edit it to your needs
-# and place it, for example, in your `$HOME/.config/`
+$ sudo apt install target/debian/wlrigctl.deb
 
-[cloudlog]
-# Note: URL should end with "/index.php/api/radio".
-url = "https://cloudlog.example.com/index.php/api/radio"
-key = "clxxxxxxxxxxxxx"
-identifier = "clrigctl"
-
-[flrig]
-# Note: Do not forget the "http://".
-host = "http://127.0.0.1"
-port = "12345"
+$ mkdir -p ~/.config/wlrigctl/
+$ cp /usr/share/wlrigctl/example.toml ~/.config/wlrigctl/config.toml
 ```
 
-If you want to run clrigctl always in the background, you can copy the example systemd service file `clrigctl.service` to `$HOME/.config/systemd/user/` and adapt it (at least use the correct path to the binary!).
+## Configuring
+
+_Edit ~/.config/wlrigctl/config.toml as you wish_
+
+(you'll need to insert some Wavelog API keys that you must generate
+for yourself)
+
+## Enabling/Starting
+
+These are one-off operations.
+
 ```
-[Unit]
-Description=Cloudlog CAT Control
-
-[Service]
-RestartSec=2s
-Type=simple
-ExecStart=/home/MYUSER/.local/bin/clrigctl
-Restart=always
-#Environment=RUST_LOG=Debug
-
-[Install]
-WantedBy=default.target
+$ systemctl --user daemon-reload
+$ systemctl --user enable --now wlrigctl.service
 ```
-
-After a `systemctl --user daemon-reload` you can enable (and start) the service with `systemctl --user enable --now clrigctl.service`. 
-
-clrigctl then running in the background. It will just do nothing if there is no Flrig instance running. 
-
-## Feedback welcome
-Any feedback is very welcome. Please let me know whether the program was useful for you or if there are perhaps any suggestions or bugs. You can reach me on Matrix Chat [@nnmcm:darc.de](https://matrix.to/#/@nnmcm:darc.de), via the Fediverse [@DG2SMB@social.darc.de](https://social.darc.de/@dg2smb) or just plain old E-Mail [dg2smb@darc.de](mailto:dg2smb@darc.de).
-
-73  
-Martin, DG2SMB

@@ -1,6 +1,6 @@
 [package]
 name = "wlrigctl"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Martin Brodbeck <dg2smb@darc.de>", "wfnutt <33999718+wfnutt@users.noreply.github.com>"]
 
@@ -24,3 +24,14 @@ bincode2 = "2.0.1"
 
 [profile.release]
 strip = "symbols"
+
+[package.metadata.deb]
+maintainer = "wfnutt <33999718+wfnutt@users.noreply.github.com>"
+depends = "systemd"
+section = "hamradio"
+priority = "optional"
+assets = [
+  ["target/release/wlrigctl", "usr/bin/wlrigctl", "755"],
+  ["packaging/wlrigctl.service", "usr/lib/systemd/user/wlrigctl.service", 644],
+  ["packaging/example.toml", "usr/share/wlrigctl/example.toml", "644"],
+]
