@@ -2,10 +2,9 @@ use std::{thread, time::Duration, net::{UdpSocket, SocketAddr}};
 use std::fmt;
 use std::fmt::Display;
 use serde::{Serialize, Deserialize};
-use serde_json::json;
 use bincode2::LengthOption::U32;
 use log::info;
-use crate::wavelog::upload_wsjtx_qso_data;
+use crate::wavelog::{WavelogSettings, upload_wsjtx_qso_data};
 
 // Settings from config file
 #[derive(Debug, Deserialize)]
@@ -171,7 +170,9 @@ impl Display for WSJTXError {
 
 impl std::error::Error for WSJTXError {}
 
-pub async fn decode_hdr(buf: &[u8]) -> Result<(), WSJTXError> {
+pub async fn decode_hdr(wavelog_settings: WavelogSettings,
+                        buf: &[u8])
+-> Result<(), WSJTXError> {
     if buf.len() < SZ_HDR {
         let errmsg = "Datagram too short for WSJTX header".to_string();
         return Err(WSJTXError::DatagramTooShort(errmsg))
@@ -195,16 +196,8 @@ pub async fn decode_hdr(buf: &[u8]) -> Result<(), WSJTXError> {
                 //WSJTXMsg::Heartbeat { .. } => { println!("heartbeat"); Ok(())},
                 //WSJTXMsg::Status { .. } => { println!("status"); Ok(())},
                 //WSJTXMsg::Decode { .. } => {println!("decode"); Ok(())},
-                // XXX: Obtain these key params from the settings file
                 WSJTXMsg::LoggedADIF {id: _, adif_text} => {
-                    let json_data = json!({
-                        "key": "wl678c05df0eb29",
-                        "station_profile_id": 1,
-                        "type": "adif",
-                        "string": adif_text
-                    });
-                    // XXX: Obtain these key params from the settings file
-                    match upload_wsjtx_qso_data("http://localhost/api/qso", &json_data).await {
+                    match upload_wsjtx_qso_data(wavelog_settings, adif_text).await {
                         Ok(_) => Ok(()),
                         Err(_) => Err(WSJTXError::QSOUploadFailed("upload failure".to_string())),
 
@@ -220,19 +213,21 @@ pub async fn decode_hdr(buf: &[u8]) -> Result<(), WSJTXError> {
     }
 }
 
-async fn rxhandler(rxdata: &[u8], _src: SocketAddr) {
-    match decode_hdr(rxdata).await {
+async fn rxhandler(wavelog_settings: WavelogSettings,
+                   rxdata: &[u8], _src: SocketAddr) {
+    match decode_hdr(wavelog_settings, rxdata).await {
         Ok(_) => (),
         Err(e) => println!("Error: {}", e)
     }
 }
 
-async fn wsjtx_rxloop(socket: UdpSocket, err_timeout: u64) {
+async fn wsjtx_rxloop(wavelog_settings: WavelogSettings,
+                      socket: UdpSocket, err_timeout: u64) {
     loop {
         let mut buf = [0; SZ_RXBUF];
 
         match socket.recv_from(&mut buf) {
-            Ok((amt, src)) => rxhandler(&buf[0..amt], src).await,
+            Ok((amt, src)) => rxhandler(wavelog_settings.clone(), &buf[0..amt], src).await,
             Err(e) => {
                 println!("Error: {}", e);
                 thread::sleep(Duration::from_secs(err_timeout));
@@ -241,14 +236,14 @@ async fn wsjtx_rxloop(socket: UdpSocket, err_timeout: u64) {
     }
 }
 
-pub fn wsjtx_thread(host: String, port: u16, err_timeout: u64) {
-    let url = format!("{host}:{port}");
+pub fn wsjtx_thread(wsjtx_settings: WsjtxSettings, wavelog_settings: WavelogSettings) {
+    let url = format!("{0}:{1}", wsjtx_settings.host, wsjtx_settings.port);
     info!("Listening for WSJTX QSO logs on: {url}");
     tokio::task::spawn(async move {
         let socket = UdpSocket::bind(url);
         match socket {
             Err(e) => println!("couldn't create socket for WSJTX QSO logging: {e}"),
-            Ok(socket) => wsjtx_rxloop(socket, err_timeout).await,
+            Ok(socket) => wsjtx_rxloop(wavelog_settings, socket, wsjtx_settings.err_timeout).await,
         }
     });
 }

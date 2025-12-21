@@ -3,44 +3,17 @@ use std::path::PathBuf;
 use config::{Config, ConfigError, File};
 use serde_derive::Deserialize;
 
+use crate::wavelog::WavelogSettings;
+use crate::flrig::FlrigSettings;
+use crate::cat::CatSettings;
 use crate::wsjtx::WsjtxSettings;
-
-#[derive(Debug, Deserialize)]
-pub struct Performance {
-    pub interval: u64,
-}
-
-// XXX: Probably these settings should move to wavelog.rs
-#[derive(Debug, Deserialize)]
-pub struct Wavelog {
-    pub url: String,
-    pub key: String,
-    pub identifier: String,
-}
-
-// XXX: Move to flrig.rs ?
-#[derive(Debug, Deserialize)]
-pub struct Flrig {
-    pub host: String,
-    pub port: String,
-    pub maxpower: String,
-    pub cwbandwidth: Option<u32>,
-}
-
-// XXX: Move to...? which mod is responsible for CAT, and how is that different to FLrig???
-#[derive(Debug, Deserialize)]
-pub struct CAT {
-    pub host: String,
-    pub port: String,
-}
 
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 pub struct Settings {
-    pub performance: Performance,
-    pub wavelog: Wavelog,
-    pub flrig: Flrig,
-    pub CAT: CAT,
+    pub wavelog: WavelogSettings,
+    pub flrig: FlrigSettings,
+    pub CAT: CatSettings,
     pub WSJTX: WsjtxSettings,
 }
 

@@ -1,12 +1,13 @@
 [Unit]
-Description=Cloudlog CAT Control
+Description=Wavelog Rig Control
 
 [Service]
 RestartSec=2s
 Type=simple
-ExecStart=/home/MYUSER/.local/bin/clrigctl
-Restart=always
+ExecStart=/usr/bin/wlrigctl
+Restart=on-failure
 #Environment=RUST_LOG=Debug
+#Environment=RUST_LOG=Debug RUST_BACKTRACE=full
 
 [Install]
 WantedBy=default.target

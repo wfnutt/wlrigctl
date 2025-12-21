@@ -70,7 +70,7 @@ flavours of Linux. The daemon will run as you rather than root, so copy the
 example config file for the daemon.
 
 ```
-$ sudo apt install target/debian/wlrigctl.deb
+$ sudo apt install target/debian/wlrigctl*.deb
 
 $ mkdir -p ~/.config/wlrigctl/
 $ cp /usr/share/wlrigctl/example.toml ~/.config/wlrigctl/config.toml
