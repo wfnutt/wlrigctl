@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use crate::flrig;
+use log::info;
 use reqwest::{Client, Error};
 use serde::Serialize;
-use serde_json::{json, Value};
 use serde_derive::Deserialize;
+use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio::time::Duration;
-use log::info;
-use crate::flrig;
 
 // settings from .toml file
 #[derive(Debug, Deserialize, Clone)]
@@ -27,12 +27,14 @@ pub struct RadioData {
     pub power: String,
 }
 
-async fn upload_live_radio_data(settings: WavelogSettings, radio_data: &RadioData)
--> Result<(), Error> {
-
+async fn upload_live_radio_data(
+    settings: WavelogSettings,
+    radio_data: &RadioData,
+) -> Result<(), Error> {
     let client = Client::new();
 
-    client.post(settings.url.clone())
+    client
+        .post(settings.url.clone())
         .json(&radio_data)
         .send()
         .await?;
@@ -40,9 +42,10 @@ async fn upload_live_radio_data(settings: WavelogSettings, radio_data: &RadioDat
     Ok(())
 }
 
-pub async fn upload_wsjtx_qso_data(settings: WavelogSettings, adif_text: String)
--> Result<(), Error> {
-
+pub async fn upload_wsjtx_qso_data(
+    settings: WavelogSettings,
+    adif_text: String,
+) -> Result<(), Error> {
     let client = Client::new();
 
     let qso_data: Value = json!({
@@ -52,7 +55,8 @@ pub async fn upload_wsjtx_qso_data(settings: WavelogSettings, adif_text: String)
         "string": adif_text
     });
 
-    client.post(settings.qso_url.clone())
+    client
+        .post(settings.qso_url.clone())
         .json(&qso_data)
         .send()
         .await?;
@@ -61,7 +65,6 @@ pub async fn upload_wsjtx_qso_data(settings: WavelogSettings, adif_text: String)
 }
 
 pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>) {
-
     let mut radio_data_current = RadioData {
         key: settings.key.clone(),
         radio: settings.identifier.clone(),
@@ -94,8 +97,8 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>) {
 
                         // If attempt to push VFO info to wavelog fails this time,
                         // maybe the failure might be transient, and we should try next time
-                        let _result = upload_live_radio_data(settings.clone(), &radio_data_current)
-                            .await;
+                        let _result =
+                            upload_live_radio_data(settings.clone(), &radio_data_current).await;
                     }
                 }
                 Err(e) => info!("Got err:{:#?}", e),

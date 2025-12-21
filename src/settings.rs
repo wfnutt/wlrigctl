@@ -1,11 +1,11 @@
-use std::env;
-use std::path::PathBuf;
 use config::{Config, ConfigError, File};
 use serde_derive::Deserialize;
+use std::env;
+use std::path::PathBuf;
 
-use crate::wavelog::WavelogSettings;
-use crate::flrig::FlrigSettings;
 use crate::cat::CatSettings;
+use crate::flrig::FlrigSettings;
+use crate::wavelog::WavelogSettings;
 use crate::wsjtx::WsjtxSettings;
 
 #[allow(non_snake_case)]
@@ -19,7 +19,6 @@ pub struct Settings {
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-
         let home_dir = env::home_dir()
             .ok_or_else(|| ConfigError::Message("No home directory found".into()))?;
 
@@ -32,7 +31,8 @@ impl Settings {
 
         let config_file = base_dir.join(app_name).join("config.toml");
 
-        let config_path = config_file.to_str()
+        let config_path = config_file
+            .to_str()
             .ok_or_else(|| ConfigError::Message("Config path not valid UTF-8".into()))?;
 
         let settings = Config::builder()

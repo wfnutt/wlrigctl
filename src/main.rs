@@ -1,8 +1,8 @@
-mod wavelog;
-mod flrig;
-mod wsjtx;
 mod cat;
+mod flrig;
 mod settings;
+mod wavelog;
+mod wsjtx;
 
 use std::process;
 use std::sync::Arc;
@@ -14,12 +14,11 @@ use hyper::body::Bytes;
 use hyper::Response;
 pub type HttpResponse = Response<Full<Bytes>>;
 
-use crate::wavelog::wavelog_thread;
-use crate::wsjtx::wsjtx_thread;
 #[allow(non_snake_case)]
 use crate::cat::CAT_thread;
 use crate::settings::Settings;
-
+use crate::wavelog::wavelog_thread;
+use crate::wsjtx::wsjtx_thread;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

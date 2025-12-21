@@ -1,19 +1,19 @@
 use log::{debug, info};
 
-use std::net::IpAddr;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::net::TcpListener;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use serde_derive::Deserialize;
+use std::net::IpAddr;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::net::TcpListener;
 
-use std::convert::Infallible;
-use std::str::FromStr;
 use hyper::body::{Bytes, Incoming};
 use hyper::header::CONTENT_TYPE;
 use hyper::{Request, Response, StatusCode};
+use std::convert::Infallible;
+use std::str::FromStr;
 
 pub type HttpResponse = Response<Full<Bytes>>;
 
@@ -42,13 +42,13 @@ impl FromStr for WavelogMode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "cw"    => Ok(WavelogMode::Cw),
+            "cw" => Ok(WavelogMode::Cw),
             "phone" => Ok(WavelogMode::Phone),
-            "lsb"   => Ok(WavelogMode::LSB),
-            "usb"   => Ok(WavelogMode::USB),
-            "digi"  => Ok(WavelogMode::Digi),
-            "rtty"  => Ok(WavelogMode::Rtty),
-            _       => Err(()),
+            "lsb" => Ok(WavelogMode::LSB),
+            "usb" => Ok(WavelogMode::USB),
+            "digi" => Ok(WavelogMode::Digi),
+            "rtty" => Ok(WavelogMode::Rtty),
+            _ => Err(()),
         }
     }
 }
@@ -67,7 +67,6 @@ impl FromStr for WavelogMode {
 // 10m: 28.074 MHz
 // 6m: 50.313 MHz
 fn is_ft8(freq_hz: f64) -> bool {
-
     const LO_ALLOWANCE: f64 = 2_000.0;
     const HI_ALLOWANCE: f64 = 3_000.0;
     const FT8: [f64; 10] = [
@@ -98,9 +97,7 @@ struct Qsy {
     mode: WavelogMode,
 }
 
-fn http_err_str(
-    status: StatusCode,
-    msg: impl Into<String>,) -> HttpResponse {
+fn http_err_str(status: StatusCode, msg: impl Into<String>) -> HttpResponse {
     match Response::builder()
         .status(status)
         .body(Full::new(Bytes::from(msg.into())))
@@ -119,7 +116,6 @@ fn http_err_str(
     }
 }
 
-
 // Parse '/14030000/cw' into a typed struct: Qsy
 fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, HttpResponse> {
     let parts: Vec<&str> = req
@@ -130,18 +126,26 @@ fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, HttpResponse> {
         .collect();
 
     if parts.len() != 2 {
-        return Err(http_err_str(StatusCode::BAD_REQUEST,
-                                "Expected /<freq>/<mode>"));
+        return Err(http_err_str(
+            StatusCode::BAD_REQUEST,
+            "Expected /<freq>/<mode>",
+        ));
     }
 
-    let freq: u32 = parts[0].parse::<u32>()
-        .map_err(|_| http_err_str(StatusCode::BAD_REQUEST,
-                                  "Frequency must be a positive integer"))?;
+    let freq: u32 = parts[0].parse::<u32>().map_err(|_| {
+        http_err_str(
+            StatusCode::BAD_REQUEST,
+            "Frequency must be a positive integer",
+        )
+    })?;
 
-    let mode = parts[1].parse::<WavelogMode>()
-        .map_err(|_| http_err_str(StatusCode::BAD_REQUEST,
-                                  "Invalid mode"))?;
-    Ok(Qsy { freq: freq as f64, mode })
+    let mode = parts[1]
+        .parse::<WavelogMode>()
+        .map_err(|_| http_err_str(StatusCode::BAD_REQUEST, "Invalid mode"))?;
+    Ok(Qsy {
+        freq: freq as f64,
+        mode,
+    })
 }
 
 // When Wavelog requests CAT control to change transceiver frequency we try to provide some
@@ -162,15 +166,17 @@ fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, HttpResponse> {
 // See unit tests at bottom of file
 fn wavelog_bandlist_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
     if is_ft8(freq) {
-            Mode::D_USB
+        Mode::D_USB
     } else {
         match mode {
             WavelogMode::Cw => Mode::CW,
-            WavelogMode::Phone => if freq < 10_000_000.0 {
-                Mode::LSB
-            } else {
-                Mode::USB
-            },
+            WavelogMode::Phone => {
+                if freq < 10_000_000.0 {
+                    Mode::LSB
+                } else {
+                    Mode::USB
+                }
+            }
             WavelogMode::LSB => Mode::LSB,
             WavelogMode::USB => Mode::USB,
             WavelogMode::Digi => Mode::RTTY,
@@ -179,12 +185,10 @@ fn wavelog_bandlist_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
     }
 }
 
-
 async fn qsy(
     rig: Arc<flrig::FLRig>,
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-
     info!("qsy() called with: {}", &req.uri().path());
 
     let qsyinfo = match parse_qsy_path(&req) {
@@ -197,17 +201,21 @@ async fn qsy(
     let mode = wavelog_bandlist_to_flrig_mode(freq, qsyinfo.mode);
 
     if let Err(e) = rig.set_vfo(freq).await {
-        return Ok(http_err_str(StatusCode::INTERNAL_SERVER_ERROR,
-                               format!("Failed to set frequency: {e}")))
+        return Ok(http_err_str(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to set frequency: {e}"),
+        ));
     };
 
     if let Err(e) = rig.set_mode(mode).await {
-        return Ok(http_err_str(StatusCode::INTERNAL_SERVER_ERROR,
-                               format!("Failed to set mode: {e}")))
+        return Ok(http_err_str(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to set mode: {e}"),
+        ));
     }
 
     let body = format!(
-r#"{{
+        r#"{{
     "status": "ok",
     "connected": true,
     "frequency": {},
@@ -220,25 +228,26 @@ r#"{{
         rig.get_identifier(),
     );
 
-    Ok(
-        Response::builder()
-            .status(200)
-            .header(CONTENT_TYPE, "application/json")
-            .header("Access-Control-Allow-Origin", "*")
-            .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            .header("Access-Control-Allow-Headers", "Content-Type")
-            .body(Full::new(Bytes::from(body)))
-            .unwrap()
-    )
+    Ok(Response::builder()
+        .status(200)
+        .header(CONTENT_TYPE, "application/json")
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        .header("Access-Control-Allow-Headers", "Content-Type")
+        .body(Full::new(Bytes::from(body)))
+        .unwrap())
 }
 
 #[allow(non_snake_case)]
-pub async fn CAT_thread(settings: CatSettings, rig: &Arc<flrig::FLRig>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn CAT_thread(
+    settings: CatSettings,
+    rig: &Arc<flrig::FLRig>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Listen on TCP socket for someone in Cloudlog/Wavelog clicking the bandmap
-    let cat_ipv4: IpAddr = settings.host
-        .trim()
-        .parse()
-        .unwrap_or_else(|_| panic!("Invalid IP address in settings CAT.host: {}", settings.host));
+    let cat_ipv4: IpAddr =
+        settings.host.trim().parse().unwrap_or_else(|_| {
+            panic!("Invalid IP address in settings CAT.host: {}", settings.host)
+        });
     let addr = SocketAddr::from((cat_ipv4, settings.port));
 
     info!("Listening for CAT requests from Wavelog on: {:#?}", addr);
@@ -253,9 +262,7 @@ pub async fn CAT_thread(settings: CatSettings, rig: &Arc<flrig::FLRig>) -> Resul
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .half_close(true)
-                .serve_connection(io, service_fn( move |req| {
-                    qsy(rig_for_qsy.clone(), req)
-                }))
+                .serve_connection(io, service_fn(move |req| qsy(rig_for_qsy.clone(), req)))
                 .await
             {
                 // This seems to happen if wavelog doesn't wait for the response to their second
@@ -338,7 +345,10 @@ mod tests {
         ];
 
         for wl_mode in ALL_WL_MODES {
-            assert_eq!(wavelog_bandlist_to_flrig_mode(FT8_40M, wl_mode), Mode::D_USB);
+            assert_eq!(
+                wavelog_bandlist_to_flrig_mode(FT8_40M, wl_mode),
+                Mode::D_USB
+            );
         }
     }
 
@@ -353,8 +363,10 @@ mod tests {
         ];
 
         for freq in BAND_40M {
-            assert_eq!(wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Cw),
-                       Mode::CW);
+            assert_eq!(
+                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Cw),
+                Mode::CW
+            );
         }
     }
 
@@ -369,8 +381,10 @@ mod tests {
         ];
 
         for freq in BAND_40M {
-            assert_eq!(wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Phone),
-                       Mode::LSB);
+            assert_eq!(
+                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Phone),
+                Mode::LSB
+            );
         }
     }
 
@@ -385,8 +399,10 @@ mod tests {
         ];
 
         for freq in BAND_40M {
-            assert_eq!(wavelog_bandlist_to_flrig_mode(freq, WavelogMode::LSB),
-                       Mode::LSB);
+            assert_eq!(
+                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::LSB),
+                Mode::LSB
+            );
         }
     }
 
@@ -401,8 +417,10 @@ mod tests {
         ];
 
         for freq in BAND_40M {
-            assert_eq!(wavelog_bandlist_to_flrig_mode(freq, WavelogMode::USB),
-                       Mode::USB);
+            assert_eq!(
+                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::USB),
+                Mode::USB
+            );
         }
     }
 
@@ -417,11 +435,15 @@ mod tests {
         ];
 
         for freq in BAND_40M {
-            assert_eq!(wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Digi),
-                       Mode::RTTY);
+            assert_eq!(
+                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Digi),
+                Mode::RTTY
+            );
 
-            assert_eq!(wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Rtty),
-                       Mode::RTTY);
+            assert_eq!(
+                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Rtty),
+                Mode::RTTY
+            );
         }
     }
 }
