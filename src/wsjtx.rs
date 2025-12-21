@@ -18,44 +18,60 @@ const SZ_RXBUF: usize = 1500; // close enough for a typical Ethernet MTU
 const WSJTX_MAGIC: u32 = 0xadbccbda;
 const SZ_HDR: usize = 12; // bytes of initial header
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[repr(C)]
+pub struct WSJTX_Heartbeat {
+    id: String,
+    max_schema_num: u32,
+    version: String,
+    revision: u32,
+}
 
-// XXX: Needs tidying to explicitly specify size of the discriminator.
-// XXX: Also make the enum just a set of structs which define each message individually...
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[repr(C)]
+pub struct WSJTX_Status {
+    id: String,
+    dial_frequency_hz: u64,
+    mode: String,
+    dx_call: String,
+    report: String,
+    tx_mode: String,
+    tx_enabled: u8,
+    transmitting: u8,
+    decoding: u8,
+    pad: u8,
+    rx_df: u32,
+    tx_df: u32,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[repr(C)]
+pub struct WSJTX_Decode {
+    id: String,
+    new: u8,
+    time: u32,
+    snr: i32,
+    delta_t: f64,
+    delta_f: u32,
+    mode: String,
+    message: String,
+    low_confidence: u8,
+    off_air: u8,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[repr(C)]
+pub struct WSJTX_LoggedADIF {
+    id: String,
+    adif_text: String
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 #[repr(C)]
 pub enum WSJTXMsg {
-    Heartbeat {
-        id: String,
-        max_schema_num: u32,
-        version: String,
-        revision: u32,
-    },
-    Status {
-        id: String,
-        dial_frequency_hz: u64,
-        mode: String,
-        dx_call: String,
-        report: String,
-        tx_mode: String,
-        tx_enabled: u8,
-        transmitting: u8,
-        decoding: u8,
-        pad: u8,
-        rx_df: u32,
-        tx_df: u32,
-    },
-    Decode {
-        id: String,
-        new: u8,
-        time: u32,
-        snr: i32,
-        delta_t: f64,
-        delta_f: u32,
-        mode: String,
-        message: String,
-        low_confidence: u8,
-        off_air: u8,
-    },
+    Heartbeat(WSJTX_Heartbeat),
+    Status(WSJTX_Status),
+    Decode(WSJTX_Decode),
     Clear,
     Reply,
     QSOLogged,
@@ -65,60 +81,50 @@ pub enum WSJTXMsg {
     FreeText,
     WSPRDecode,
     Location,
-    LoggedADIF {
-        id: String,
-        adif_text: String
-    },
+    LoggedADIF(WSJTX_LoggedADIF),
     HighlightCallsign,
     SwitchConfiguration,
     Configure,
 }
 
+impl Display for WSJTX_Heartbeat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Heartbeat id:{} max_schema_num:{} version:{} revision:{}",
+               self.id, self.max_schema_num, self.version, self.revision)
+    }
+}
+
+impl Display for WSJTX_Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Status id: {} dial_frequency_hz: {} mode: {} dxcall: {} report: {} \
+                   tx_mode: {} tx_enabled: {} transmitting: {} decoding: {} \
+                   rx_df: {} tx_df: {}",
+               self.id, self.dial_frequency_hz, self.mode, self.dx_call, self.report, self.tx_mode,
+               self.tx_enabled, self.transmitting, self.decoding, self.rx_df, self.tx_df)
+    }
+}
+
+impl Display for WSJTX_Decode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Decode: id: {} new: {} time: {} snr: {} delta_t: {} delta_f: {} \
+            mode: {} message: {} low_confidence: {} off_air: {}",
+            self.id, self.new, self.time, self.snr, self.delta_t, self.delta_f, self.mode,
+            self.message, self.low_confidence, self.off_air)
+    }
+}
+
+impl Display for WSJTX_LoggedADIF {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "LoggedADIF: Logged id: {} ADIF text: {}", self.id, self.adif_text)
+    }
+}
+
 impl Display for WSJTXMsg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WSJTXMsg::Heartbeat {
-                id,
-                max_schema_num,
-                version,
-                revision
-            } => write!(f, "Heartbeat id:{} max_schema_num:{} version:{} revision:{}",
-                id, max_schema_num, version, revision),
-            WSJTXMsg::Status {
-                id,
-                dial_frequency_hz,
-                mode,
-                dx_call,
-                report,
-                tx_mode,
-                tx_enabled,
-                transmitting,
-                decoding,
-                pad: _,
-                rx_df,
-                tx_df,
-            } => write!(f,
-                "Status id: {} dial_frequency_hz: {} mode: {} dxcall: {} report: {} \
-                tx_mode: {} tx_enabled: {} transmitting: {} decoding: {} \
-                rx_df: {} tx_df: {}",
-                id, dial_frequency_hz, mode, dx_call, report, tx_mode,
-                tx_enabled, transmitting, decoding, rx_df, tx_df
-            ),
-            WSJTXMsg::Decode {
-                id,
-                new,
-                time,
-                snr,
-                delta_t,
-                delta_f,
-                mode,
-                message,
-                low_confidence,
-                off_air,
-            } => write!(f, "Decode id: {} new: {} time: {} snr: {} delta_t: {} delta_f: {} \
-                    mode: {} message: {} low_confidence: {} off_air: {}",
-                    id, new, time, snr, delta_t, delta_f, mode, message, low_confidence, off_air
-            ),
+            WSJTXMsg::Heartbeat(msg)      => write!(f, "{}", msg),
+            WSJTXMsg::Status(msg)         => write!(f, "{}", msg),
+            WSJTXMsg::Decode(msg)         => write!(f, "{}", msg),
             WSJTXMsg::Clear               => write!(f, "Clear"),
             WSJTXMsg::Reply               => write!(f, "Reply"),
             WSJTXMsg::QSOLogged           => write!(f, "QSO Logged"),
@@ -128,10 +134,7 @@ impl Display for WSJTXMsg {
             WSJTXMsg::FreeText            => write!(f, "Free Text"),
             WSJTXMsg::WSPRDecode          => write!(f, "WSPR Decode"),
             WSJTXMsg::Location            => write!(f, "Location"),
-            WSJTXMsg::LoggedADIF {
-                id,
-                adif_text,
-            } => write!(f, "Logged id: {} ADIF text: {}", id, adif_text),
+            WSJTXMsg::LoggedADIF(msg)     => write!(f, "{}", msg),
             WSJTXMsg::HighlightCallsign   => write!(f, "Highlight Callsign"),
             WSJTXMsg::SwitchConfiguration => write!(f, "Switch Configuration"),
             WSJTXMsg::Configure           => write!(f, "Configure"),
@@ -193,11 +196,11 @@ pub async fn decode_hdr(wavelog_settings: WavelogSettings,
                 return Err(WSJTXError::UnsupportedSchema(errmsg));
             }
             match wsjtx.msg {
-                //WSJTXMsg::Heartbeat { .. } => { println!("heartbeat"); Ok(())},
-                //WSJTXMsg::Status { .. } => { println!("status"); Ok(())},
-                //WSJTXMsg::Decode { .. } => {println!("decode"); Ok(())},
-                WSJTXMsg::LoggedADIF {id: _, adif_text} => {
-                    match upload_wsjtx_qso_data(wavelog_settings, adif_text).await {
+                //WSJTXMsg::Heartbeat(msg) => { println!("heartbeat"); Ok(())},
+                //WSJTXMsg::Status(msg)    => { println!("status"); Ok(())},
+                //WSJTXMsg::Decode(msg)    => { println!("decode"); Ok(())},
+                WSJTXMsg::LoggedADIF(msg)  => {
+                    match upload_wsjtx_qso_data(wavelog_settings, msg.adif_text).await {
                         Ok(_) => Ok(()),
                         Err(_) => Err(WSJTXError::QSOUploadFailed("upload failure".to_string())),
 
