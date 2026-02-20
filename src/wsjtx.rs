@@ -1,6 +1,6 @@
 use crate::wavelog::{upload_wsjtx_qso_data, WavelogSettings};
 use bincode2::LengthOption::U32;
-use log::info;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
@@ -239,7 +239,7 @@ pub async fn decode_hdr(wavelog_settings: WavelogSettings, buf: &[u8]) -> Result
                     }
                 }
                 msg => {
-                    println!("msg: {}", msg);
+                    debug!("{}", msg);
                     Ok(())
                 }
             }
@@ -274,7 +274,7 @@ async fn wsjtx_rxloop(wavelog_settings: WavelogSettings, socket: UdpSocket, err_
 
 pub fn wsjtx_thread(wsjtx_settings: WsjtxSettings, wavelog_settings: WavelogSettings) {
     let url = format!("{0}:{1}", wsjtx_settings.host, wsjtx_settings.port);
-    info!("Listening for WSJTX QSO logs on: {url}");
+    info!("Listening for WSJT-X QSO logs on: {url}");
     tokio::task::spawn(async move {
         let socket = UdpSocket::bind(url);
         match socket {

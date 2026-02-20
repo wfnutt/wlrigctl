@@ -24,8 +24,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     env_logger::init();
 
     let appname = env!("CARGO_PKG_NAME");
+    let appver = env!("CARGO_PKG_VERSION");
 
-    info!("{appname} started with power, WSJTX QSO and Wavelog cluster click-to-tune support.\n");
+    info!("{appname} v{appver} started.");
 
     let settings = Settings::new().unwrap_or_else(|err| {
         eprintln!("Could not read settings: {err}");

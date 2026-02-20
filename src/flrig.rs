@@ -1,5 +1,5 @@
 use crate::wavelog::RadioData;
-use log::info;
+use log::{debug, info};
 use serde_derive::Deserialize;
 use std::fmt;
 use std::result::Result;
@@ -195,7 +195,7 @@ impl FLRig {
             val => val as u32,
         };
 
-        info!("freq:{vfo} mode:{mode} power:{power} max:{maxpwr}");
+        debug!("freq:{vfo} mode:{mode} power:{power} max:{maxpwr}");
 
         let radio_data = RadioData {
             key: String::new(),
