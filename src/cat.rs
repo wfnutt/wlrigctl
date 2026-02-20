@@ -184,7 +184,7 @@ fn wavelog_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
                 } else {
                     Mode::USB
                 }
-            },
+            }
             WavelogMode::LSB => Mode::LSB,
             WavelogMode::USB => Mode::USB,
             WavelogMode::Digi => Mode::RTTY,
@@ -206,7 +206,7 @@ fn wavelog_to_yaesu_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
                 } else {
                     Mode::USB
                 }
-            },
+            }
             WavelogMode::LSB => Mode::LSB,
             WavelogMode::USB => Mode::USB,
             WavelogMode::Digi => Mode::RTTY_U,
@@ -231,7 +231,7 @@ async fn qsy(
     let freq: f64 = qsyinfo.freq;
 
     let mode = match yaesu {
-        true  => wavelog_to_yaesu_flrig_mode(freq, qsyinfo.mode),
+        true => wavelog_to_yaesu_flrig_mode(freq, qsyinfo.mode),
         false => wavelog_to_flrig_mode(freq, qsyinfo.mode),
     };
 
@@ -300,7 +300,10 @@ pub async fn CAT_thread(
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .half_close(true)
-                .serve_connection(io, service_fn(move |req| qsy(rig_for_qsy.clone(), req, yaesu)))
+                .serve_connection(
+                    io,
+                    service_fn(move |req| qsy(rig_for_qsy.clone(), req, yaesu)),
+                )
                 .await
             {
                 // This seems to happen if wavelog doesn't wait for the response to their second
