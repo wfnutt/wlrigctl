@@ -25,8 +25,10 @@ use crate::{flrig, flrig::Mode};
 pub struct CatSettings {
     pub host: String,
     pub port: u16,
+    pub yaesu: bool,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Debug)]
 enum WavelogMode {
     Cw,
@@ -164,7 +166,13 @@ fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, HttpResponse> {
 //   (perhaps I'll do more digi modes one day, and realise this behaviour is too naive...!)
 //
 // See unit tests at bottom of file
-fn wavelog_bandlist_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
+//
+// Oh, but life is never simple, is it? Turns out FLRig replicates the modes displayed on a rig's
+// panel rather than provide a single, brand-agnostic interface for transceiver mode.
+// This is great for the GUI, but rubbish for XMLRPC.
+// So on a Yaesu FTDX10 for example, there is no "CW" mode at all; one must explicitly select
+// either CW-U or CW-L. Similarly, there's RTTY-U or RTTY-L as well...
+fn wavelog_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
     if is_ft8(freq) {
         Mode::D_USB
     } else {
@@ -176,7 +184,7 @@ fn wavelog_bandlist_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
                 } else {
                     Mode::USB
                 }
-            }
+            },
             WavelogMode::LSB => Mode::LSB,
             WavelogMode::USB => Mode::USB,
             WavelogMode::Digi => Mode::RTTY,
@@ -185,9 +193,32 @@ fn wavelog_bandlist_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
     }
 }
 
+// Yaesu version to handle explicit mode naming (-U vs -L)
+fn wavelog_to_yaesu_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
+    if is_ft8(freq) {
+        Mode::DATA_U
+    } else {
+        match mode {
+            WavelogMode::Cw => Mode::CW_U,
+            WavelogMode::Phone => {
+                if freq < 10_000_000.0 {
+                    Mode::LSB
+                } else {
+                    Mode::USB
+                }
+            },
+            WavelogMode::LSB => Mode::LSB,
+            WavelogMode::USB => Mode::USB,
+            WavelogMode::Digi => Mode::RTTY_U,
+            WavelogMode::Rtty => Mode::RTTY_U,
+        }
+    }
+}
+
 async fn qsy(
     rig: Arc<flrig::FLRig>,
     req: Request<hyper::body::Incoming>,
+    yaesu: bool,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     info!("qsy() called with: {}", &req.uri().path());
 
@@ -198,7 +229,11 @@ async fn qsy(
 
     info!("Got freq:{} mode:{:?}", qsyinfo.freq, qsyinfo.mode);
     let freq: f64 = qsyinfo.freq;
-    let mode = wavelog_bandlist_to_flrig_mode(freq, qsyinfo.mode);
+
+    let mode = match yaesu {
+        true  => wavelog_to_yaesu_flrig_mode(freq, qsyinfo.mode),
+        false => wavelog_to_flrig_mode(freq, qsyinfo.mode),
+    };
 
     if let Err(e) = rig.set_vfo(freq).await {
         return Ok(http_err_str(
@@ -250,7 +285,10 @@ pub async fn CAT_thread(
         });
     let addr = SocketAddr::from((cat_ipv4, settings.port));
 
+    let yaesu: bool = settings.yaesu;
+
     info!("Listening for CAT requests from Wavelog on: {:#?}", addr);
+    info!("Yaesu mode is: {:#?}", yaesu);
 
     let listener = TcpListener::bind(addr).await?;
 
@@ -262,7 +300,7 @@ pub async fn CAT_thread(
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .half_close(true)
-                .serve_connection(io, service_fn(move |req| qsy(rig_for_qsy.clone(), req)))
+                .serve_connection(io, service_fn(move |req| qsy(rig_for_qsy.clone(), req, yaesu)))
                 .await
             {
                 // This seems to happen if wavelog doesn't wait for the response to their second

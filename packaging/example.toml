@@ -39,6 +39,10 @@ cwbandwidth = 1
 host = "127.0.0.1"
 port = 54321
 
+# boolean flag to select use of Yaesu explicit -U or -L modes when mapping from
+# wavelog to flrig.
+# e.g. "CW-U" instead of "CW"
+yaesu = false
 
 
 # For capturing QSO ADIF from WSJT-X

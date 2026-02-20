@@ -64,34 +64,58 @@ impl From<ClientError> for FlrigError {
 
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Mode {
     LSB,
     USB,
     AM,
-    CW,
-    RTTY,
+    AM_N,
+    CW, // or CW_U on Yaesu?
+    CW_U,
+    RTTY, // or RTTY_U on Yaesu?
+    RTTY_U,
     FM,
-    CW_R,
-    RTTY_R,
-    D_LSB,
-    D_USB,
+    FM_N,
+    CW_R, // or CW_L on Yaesu?
+    CW_L,
+    RTTY_R, // or RTTY_L on Yaesu?
+    RTTY_L,
+    D_LSB, // or DATA_L on Yaesu?
+    DATA_L,
+    D_USB, // or DATA_U on Yaesu?
+    DATA_U,
+    DATA_FM,
+    DATA_FMN,
+    PSK,
 }
+
 
 #[allow(dead_code)]
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Mode::LSB => write!(f, "LSB"),
-            Mode::USB => write!(f, "USB"),
-            Mode::AM => write!(f, "AM"),
-            Mode::CW => write!(f, "CW"),
-            Mode::RTTY => write!(f, "RTTY"),
-            Mode::FM => write!(f, "FM"),
-            Mode::CW_R => write!(f, "CW-R"),
-            Mode::RTTY_R => write!(f, "RTTY-R"),
-            Mode::D_LSB => write!(f, "D-LSB"),
-            Mode::D_USB => write!(f, "D-USB"),
+            Mode::LSB      => write!(f, "LSB"),
+            Mode::USB      => write!(f, "USB"),
+            Mode::AM       => write!(f, "AM"),
+            Mode::AM_N     => write!(f, "AM-N"),
+            Mode::CW       => write!(f, "CW"),
+            Mode::CW_U     => write!(f, "CW-U"),
+            Mode::RTTY     => write!(f, "RTTY"),
+            Mode::RTTY_U   => write!(f, "RTTY-U"),
+            Mode::FM       => write!(f, "FM"),
+            Mode::FM_N     => write!(f, "FM-N"),
+            Mode::CW_R     => write!(f, "CW-R"),
+            Mode::CW_L     => write!(f, "CW-L"),
+            Mode::RTTY_R   => write!(f, "RTTY-R"),
+            Mode::RTTY_L   => write!(f, "RTTY-L"),
+            Mode::D_LSB    => write!(f, "D-LSB"),
+            Mode::DATA_L   => write!(f, "DATA-L"),
+            Mode::D_USB    => write!(f, "D-USB"),
+            Mode::DATA_U   => write!(f, "DATA-U"),
+            Mode::DATA_FM  => write!(f, "DATA-FM"),
+            Mode::DATA_FMN => write!(f, "DATA-FMN"),
+            Mode::PSK      => write!(f, "PSK"),
         }
     }
 }
@@ -101,17 +125,28 @@ impl FromStr for Mode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "LSB" => Ok(Mode::LSB),
-            "USB" => Ok(Mode::USB),
-            "AM" => Ok(Mode::AM),
-            "CW" => Ok(Mode::CW),
-            "RTTY" => Ok(Mode::RTTY),
-            "FM" => Ok(Mode::FM),
-            "CW-R" => Ok(Mode::CW_R),
-            "RTTY-R" => Ok(Mode::RTTY_R),
-            "D-LSB" => Ok(Mode::D_LSB),
-            "D-USB" => Ok(Mode::D_USB),
-            _ => Err(()),
+            "LSB"      => Ok(Mode::LSB),
+            "USB"      => Ok(Mode::USB),
+            "AM"       => Ok(Mode::AM),
+            "AM-N"     => Ok(Mode::AM_N),
+            "CW"       => Ok(Mode::CW),
+            "CW-U"     => Ok(Mode::CW_U),
+            "RTTY"     => Ok(Mode::RTTY),
+            "RTTY-U"   => Ok(Mode::RTTY_U),
+            "FM"       => Ok(Mode::FM),
+            "FM-N"     => Ok(Mode::FM_N),
+            "CW-R"     => Ok(Mode::CW_R),
+            "CW-L"     => Ok(Mode::CW_L),
+            "RTTY-R"   => Ok(Mode::RTTY_R),
+            "RTTY-L"   => Ok(Mode::RTTY_L),
+            "D-LSB"    => Ok(Mode::D_LSB),
+            "DATA-L"   => Ok(Mode::DATA_L),
+            "D-USB"    => Ok(Mode::D_USB),
+            "DATA-U"   => Ok(Mode::DATA_U),
+            "DATA-FM"  => Ok(Mode::DATA_FM),
+            "DATA-FMN" => Ok(Mode::DATA_FMN),
+            "PSK"      => Ok(Mode::PSK),
+            _          => Err(()),
         }
     }
 }
@@ -203,6 +238,8 @@ impl FLRig {
             // we're done
             return Ok(());
         }
+
+        info!("calling rig.set_mode with mode:{mode}");
 
         let _response: i32 = self.client.call("rig.set_mode", mode.to_string()).await?;
         if let Some(cwbandwidth) = self.cwbandwidth {
