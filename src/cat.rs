@@ -39,6 +39,8 @@ enum WavelogMode {
     USB,
     Digi,
     Rtty,
+    Am,
+    Fm,
 }
 
 impl FromStr for WavelogMode {
@@ -52,6 +54,8 @@ impl FromStr for WavelogMode {
             "usb" => Ok(WavelogMode::USB),
             "digi" => Ok(WavelogMode::Digi),
             "rtty" => Ok(WavelogMode::Rtty),
+            "am" => Ok(WavelogMode::Am),
+            "fm" => Ok(WavelogMode::Fm),
             _ => Err(()),
         }
     }
@@ -186,6 +190,8 @@ fn wavelog_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
             WavelogMode::USB => Mode::USB,
             WavelogMode::Digi => Mode::RTTY,
             WavelogMode::Rtty => Mode::RTTY,
+            WavelogMode::Am => Mode::AM,
+            WavelogMode::Fm => Mode::FM,
         }
     }
 }
@@ -208,6 +214,8 @@ fn wavelog_to_yaesu_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
             WavelogMode::USB => Mode::USB,
             WavelogMode::Digi => Mode::RTTY_U,
             WavelogMode::Rtty => Mode::RTTY_U,
+            WavelogMode::Am => Mode::AM,
+            WavelogMode::Fm => Mode::FM,
         }
     }
 }
@@ -453,13 +461,15 @@ mod tests {
     fn flrig_40m_ft8() {
         const FT8_40M: f64 = 7_074_000.0;
 
-        const ALL_WL_MODES: [WavelogMode; 6] = [
+        const ALL_WL_MODES: [WavelogMode; 8] = [
             WavelogMode::Cw,
             WavelogMode::Phone,
             WavelogMode::LSB,
             WavelogMode::USB,
             WavelogMode::Digi,
             WavelogMode::Rtty,
+            WavelogMode::Am,
+            WavelogMode::Fm,
         ];
 
         for wl_mode in ALL_WL_MODES {
@@ -563,5 +573,12 @@ mod tests {
                 Mode::RTTY
             );
         }
+    }
+
+    #[test]
+    fn flrig_am_fm() {
+        // AM and FM should map through regardless of frequency (no FT8 override applies)
+        assert_eq!(wavelog_to_flrig_mode(7_200_000.0, WavelogMode::Am), Mode::AM);
+        assert_eq!(wavelog_to_flrig_mode(29_600_000.0, WavelogMode::Fm), Mode::FM);
     }
 }
