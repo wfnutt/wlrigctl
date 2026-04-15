@@ -22,7 +22,6 @@ const WSJTX_MAGIC: u32 = 0xadbccbda;
 const SZ_HDR: usize = 12; // bytes of initial header
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-#[repr(C)]
 pub struct WSJTX_Heartbeat {
     id: String,
     max_schema_num: u32,
@@ -31,7 +30,6 @@ pub struct WSJTX_Heartbeat {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-#[repr(C)]
 pub struct WSJTX_Status {
     id: String,
     dial_frequency_hz: u64,
@@ -48,7 +46,6 @@ pub struct WSJTX_Status {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-#[repr(C)]
 pub struct WSJTX_Decode {
     id: String,
     new: u8,
@@ -63,14 +60,12 @@ pub struct WSJTX_Decode {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-#[repr(C)]
 pub struct WSJTX_LoggedADIF {
     id: String,
     adif_text: String,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-#[repr(C)]
 pub enum WSJTXMsg {
     Heartbeat(WSJTX_Heartbeat),
     Status(WSJTX_Status),
@@ -176,7 +171,6 @@ impl Display for WSJTXMsg {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-#[repr(C)]
 pub struct WSJTXData {
     magic: u32,
     schema: u32,
