@@ -35,9 +35,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     wavelog_thread(settings.wavelog.clone(), rig.clone());
 
     // Separate thread for someone logging from WSJTX via UDP on port 2237
-    wsjtx_thread(settings.WSJTX, settings.wavelog);
+    wsjtx_thread(settings.wsjtx, settings.wavelog);
 
     // Keep the current thread for CAT control requests from Wavelog
     // We gateway these requests back to FLRig after a little bit of massaging
-    CAT_thread(settings.CAT, &rig).await
+    CAT_thread(settings.cat, &rig).await
 }

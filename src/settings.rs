@@ -9,13 +9,12 @@ use crate::flrig::FlrigSettings;
 use crate::wavelog::WavelogSettings;
 use crate::wsjtx::WsjtxSettings;
 
-#[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 pub struct Settings {
     pub wavelog: WavelogSettings,
     pub flrig: FlrigSettings,
-    pub CAT: CatSettings,
-    pub WSJTX: WsjtxSettings,
+    pub cat: CatSettings,
+    pub wsjtx: WsjtxSettings,
 }
 
 impl Settings {
