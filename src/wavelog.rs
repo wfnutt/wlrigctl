@@ -75,15 +75,8 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>, to
     tokio::task::spawn(async move {
         let client = Client::new();
         loop {
-            // MIGHT be able to call rig.get_update() here; it'll return NIL if nothing changed
-            // XXX: FIXME
-            // If get_update() says somthing happened, try using system.multicall() to get multiple
-            // fields from flrig in one go.
-            //
-            // NOTE that we might also need to do an initial start-of-day rig.get_info() to
-            // establish initial data
             match rig_poll.get_radio_data().await {
-                Ok(radio_data_new) => {
+                Ok(Some(radio_data_new)) => {
                     if radio_data_current.frequency != radio_data_new.frequency
                         || radio_data_current.mode != radio_data_new.mode
                         || radio_data_current.power != radio_data_new.power
@@ -99,6 +92,7 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>, to
                         }
                     }
                 }
+                Ok(None) => {} // FLRig reports nothing changed; skip this cycle
                 Err(e) => info!("Got err:{:#?}", e),
             }
 

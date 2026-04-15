@@ -2534,6 +2534,7 @@ version = "0.3.1"
 dependencies = [
  "bincode2",
  "config",
+ "dxr",
  "dxr_client",
  "env_logger",
  "home",

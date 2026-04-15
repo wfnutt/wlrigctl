@@ -5,6 +5,7 @@ use std::fmt;
 use std::result::Result;
 use std::str::FromStr;
 
+use dxr::TryFromValue;
 use dxr_client::{Client, ClientBuilder, ClientError};
 use url::Url;
 
@@ -173,39 +174,52 @@ impl FLRig {
         Ok(response)
     }
 
-    pub async fn get_maxpwr(&self) -> Result<i32, ClientError> {
-        let response: i32 = self.client.call("rig.get_maxpwr", ()).await?;
+    pub async fn get_update(&self) -> Result<String, ClientError> {
+        let response: String = self.client.call("rig.get_update", ()).await?;
         Ok(response)
     }
 
-    pub async fn get_power(&self) -> Result<i32, ClientError> {
-        let response: i32 = self.client.call("rig.get_power", ()).await?;
-        Ok(response)
-    }
+    /// Fetch current radio state. Returns `None` when FLRig reports nothing has changed
+    /// since the last poll (fast path), saving the multicall round-trip.
+    pub async fn get_radio_data(&self) -> Result<Option<RadioData>, ClientError> {
+        // Fast path: FLRig returns "NIL" when nothing has changed since the last call.
+        // Note: FLRig always includes vol/mic/rfg in the response; "NIL" is only returned
+        // when those controls are unsupported by the connected rig and nothing else changed.
+        if self.get_update().await? == "NIL" {
+            return Ok(None);
+        }
 
-    pub async fn get_radio_data(&self) -> Result<RadioData, ClientError> {
-        let vfo = self.get_vfo().await?;
-        let mode = self.get_mode().await?;
-        let maxpwr: u32 = match self.get_maxpwr().await? {
-            val if val < 0 => 0,
-            val => val as u32,
-        };
-        let power: u32 = match self.get_power().await? {
-            val if val < 0 => 0,
-            val => val as u32,
-        };
+        // Fetch vfo, mode, maxpwr and power in a single XMLRPC round-trip.
+        let calls: Vec<(String, ())> = vec![
+            ("rig.get_vfo".to_string(), ()),
+            ("rig.get_mode".to_string(), ()),
+            ("rig.get_maxpwr".to_string(), ()),
+            ("rig.get_power".to_string(), ()),
+        ];
+        let mut results = self.client.multicall(calls).await?;
+        // Pop in reverse call order; the Vec always has exactly as many entries as calls sent.
+        let power_r  = results.pop().expect("multicall result count mismatch");
+        let maxpwr_r = results.pop().expect("multicall result count mismatch");
+        let mode_r   = results.pop().expect("multicall result count mismatch");
+        let vfo_r    = results.pop().expect("multicall result count mismatch");
+
+        let vfo    = String::try_from_value(&vfo_r.map_err(ClientError::from)?)?;
+        let mode   = String::try_from_value(&mode_r.map_err(ClientError::from)?)?;
+        let maxpwr = i32::try_from_value(&maxpwr_r.map_err(ClientError::from)?)?;
+        let power  = i32::try_from_value(&power_r.map_err(ClientError::from)?)?;
+
+        let maxpwr_u = if maxpwr < 0 { 0u32 } else { maxpwr as u32 };
+        let power_u  = if power  < 0 { 0u32 } else { power  as u32 };
 
         debug!("freq:{vfo} mode:{mode} power:{power} max:{maxpwr}");
 
-        let radio_data = RadioData {
+        Ok(Some(RadioData {
             key: String::new(),
             radio: String::new(),
             frequency: vfo,
             mode,
-            power: rig_power_watts(power, maxpwr, self.maxpower),
-        };
-
-        Ok(radio_data)
+            power: rig_power_watts(power_u, maxpwr_u, self.maxpower),
+        }))
     }
 
     pub async fn set_vfo(&self, freq_hz: f64) -> Result<(), ClientError> {
