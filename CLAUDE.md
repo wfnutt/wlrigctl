@@ -82,6 +82,14 @@ response.
 
 ## Remaining TODO items
 
+- **Fix bugs introduced by over-confident Claude**: the config.toml now needs to
+  have [cat] and [wsjtx] to work. That is a breaking change for existing users,
+  which is unacceptable. The original capitalisation was superior because it
+  matches the representations used: CAT and WSJTX.
+
+  Another issue that I *think* has been introduced is that when an IC-703 is in
+  D-USB mode, that mode cannot be properly recognised by Wavelog Release 2.3.
+
 - **Replace `yaesu` bool with `rig.get_modes()` auto-detection** (`cat.rs`,
   `flrig.rs`): The `yaesu = true` config flag is a brand-specific kludge.
   FLRig exports different mode strings per rig (e.g. Yaesu uses "CW-U"/"CW-L"
