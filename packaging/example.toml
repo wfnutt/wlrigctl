@@ -44,6 +44,14 @@ port = 54321
 # e.g. "CW-U" instead of "CW"
 yaesu = false
 
+# FT8 dial frequencies in Hz. When present this list replaces the built-in
+# defaults so you can update the band plan without recompiling.
+# The default list (used when this key is absent) is:
+#   160m 1840000 / 80m 3575000 / 40m 7074000 / 30m 10136000 / 20m 14074000
+#   17m 18100000 / 15m 21074000 / 12m 24915000 / 10m 28074000 / 6m 50313000
+# To override, uncomment and edit:
+# ft8_frequencies = [1840000, 3575000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000]
+
 
 # For capturing QSO ADIF from WSJT-X
 [WSJTX]

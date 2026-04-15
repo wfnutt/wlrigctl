@@ -82,40 +82,6 @@ response.
 
 ## Remaining TODO items
 
-### High value / moderate effort
-
-- **Graceful shutdown**: None of the three tasks (wavelog, wsjtx, CAT) respond
-  to shutdown signals. SIGTERM from systemd just drops the Tokio runtime. Add
-  `tokio_util::sync::CancellationToken` (or `tokio::signal::ctrl_c`) and
-  propagate a shutdown signal through all tasks. Particularly important for the
-  WSJT-X path where an in-flight QSO upload could be dropped mid-request.
-
-- **FLRig connection reuse**: Every poll cycle in `wavelog_thread` opens a new
-  TCP connection to FLRig for each of the three XMLRPC calls (vfo, mode, power).
-  The commented-out `XXX: FIXME` block in `wavelog.rs` describes two
-  improvements:
-  1. Call `rig.get_update()` first — it returns NIL if nothing has changed,
-     avoiding unnecessary subsequent calls.
-  2. If something did change, use `system.multicall()` to fetch vfo + mode +
-     power in a single round-trip instead of three.
-  The `dxr_client` crate supports both. This would substantially reduce the
-  XMLRPC chatter at the default 1-second poll rate.
-
-### Low value / small effort
-
-- **Integration tests**: `tests/` is empty. Even a compile-and-construct smoke
-  test (building a `Settings`, constructing an `FLRig` with a known-bad URL and
-  confirming it errors correctly) would catch future refactor regressions.
-
-- **More Wavelog modes**: `WavelogMode` in `cat.rs` only has six variants
-  (`Cw`, `Phone`, `LSB`, `USB`, `Digi`, `Rtty`). If Wavelog starts sending other
-  mode strings (e.g. `am`, `fm`), `parse_qsy_path` will return a 400 error.
-  Add variants as needed.
-
-- **FT8 frequencies from config**: The ten FT8 dial frequencies in `cat.rs` are
-  hardcoded. Moving them to the config file would let the club update them
-  without recompiling (useful if a band plan changes or a new band is added).
-
 - **Remove `cwbandwidth` if hysteresis is sufficient**: The comment in
   `flrig.rs set_mode` notes this might be removable. Worth testing on the
   IC-703 with `cwbandwidth` unset to see if the audio glitch is acceptable
@@ -125,7 +91,8 @@ response.
 
 | Crate | Why it's here |
 |---|---|
-| `dxr_client` | FLRig XMLRPC client (reqwest backend) |
+| `dxr_client` | FLRig XMLRPC client (reqwest + multicall backend) |
+| `dxr` | XMLRPC types (`TryFromValue`) used directly for multicall result extraction |
 | `bincode2` | WSJT-X UDP packet deserialisation |
 | `hyper` / `hyper-util` | CAT HTTP server (Wavelog → us) |
 | `reqwest` | Wavelog HTTP client (us → Wavelog), rustls-tls backend |
