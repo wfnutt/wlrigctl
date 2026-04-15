@@ -1,4 +1,5 @@
 use log::{debug, info};
+use serde_json::json;
 
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -249,19 +250,14 @@ async fn qsy(
         ));
     }
 
-    let body = format!(
-        r#"{{
-    "status": "ok",
-    "connected": true,
-    "frequency": {},
-    "mode": "{}",
-    "rig": "{}"
-}}
-"#,
-        freq,
-        mode,
-        rig.get_identifier(),
-    );
+    let body = json!({
+        "status": "ok",
+        "connected": true,
+        "frequency": freq,
+        "mode": mode.to_string(),
+        "rig": rig.get_identifier(),
+    })
+    .to_string();
 
     Ok(Response::builder()
         .status(200)
