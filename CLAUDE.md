@@ -82,6 +82,23 @@ response.
 
 ## Remaining TODO items
 
+- **Replace `yaesu` bool with `rig.get_modes()` auto-detection** (`cat.rs`,
+  `flrig.rs`): The `yaesu = true` config flag is a brand-specific kludge.
+  FLRig exports different mode strings per rig (e.g. Yaesu uses "CW-U"/"CW-L"
+  and "RTTY-U"/"RTTY-L" where ICOM/Kenwood/Elecraft use "CW" and "RTTY";
+  Kenwood calls RTTY "FSK"; Elecraft uses a single "DATA" for all digital;
+  IC-703 uses "D-USB" where newer ICOMs use "USB-D"). At `CAT_thread` startup,
+  call `rig.get_modes()` and build a `ModeMap` by picking the first available
+  match from an ordered preference list for each concept:
+  - CW:      `["CW", "CW-U"]`
+  - RTTY:    `["RTTY", "FSK", "RTTY-U"]`
+  - Digital: `["D-USB", "USB-D", "DATA-U", "DATA"]`
+  Replace the two `wavelog_to_*_flrig_mode` functions with one that takes a
+  `&ModeMap`. Remove `yaesu: bool` from `CatSettings` (the config crate
+  silently ignores the now-orphaned TOML key, so existing configs need no
+  change). This handles all major ICOM / Yaesu / Kenwood / Elecraft rigs
+  without any per-brand config.
+
 - **Remove `cwbandwidth` if hysteresis is sufficient**: The comment in
   `flrig.rs set_mode` notes this might be removable. Worth testing on the
   IC-703 with `cwbandwidth` unset to see if the audio glitch is acceptable
