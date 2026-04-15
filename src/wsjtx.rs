@@ -4,11 +4,9 @@ use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
-use std::{
-    net::{SocketAddr, UdpSocket},
-    thread,
-    time::Duration,
-};
+use std::net::SocketAddr;
+use tokio::net::UdpSocket;
+use tokio::time::Duration;
 
 // Settings from config file
 #[derive(Debug, Deserialize)]
@@ -262,11 +260,11 @@ async fn wsjtx_rxloop(wavelog_settings: WavelogSettings, socket: UdpSocket, err_
     loop {
         let mut buf = [0; SZ_RXBUF];
 
-        match socket.recv_from(&mut buf) {
+        match socket.recv_from(&mut buf).await {
             Ok((amt, src)) => rxhandler(wavelog_settings.clone(), &buf[0..amt], src).await,
             Err(e) => {
                 println!("Error: {}", e);
-                thread::sleep(Duration::from_secs(err_timeout));
+                tokio::time::sleep(Duration::from_secs(err_timeout)).await;
             }
         }
     }
@@ -276,8 +274,7 @@ pub fn wsjtx_thread(wsjtx_settings: WsjtxSettings, wavelog_settings: WavelogSett
     let url = format!("{0}:{1}", wsjtx_settings.host, wsjtx_settings.port);
     info!("Listening for WSJT-X QSO logs on: {url}");
     tokio::task::spawn(async move {
-        let socket = UdpSocket::bind(url);
-        match socket {
+        match UdpSocket::bind(&url).await {
             Err(e) => println!("couldn't create socket for WSJTX QSO logging: {e}"),
             Ok(socket) => wsjtx_rxloop(wavelog_settings, socket, wsjtx_settings.err_timeout).await,
         }
