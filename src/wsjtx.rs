@@ -1,6 +1,6 @@
 use crate::wavelog::{upload_wsjtx_qso_data, WavelogSettings};
 use bincode2::LengthOption::U32;
-use log::{debug, info};
+use log::{debug, error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -253,7 +253,7 @@ pub async fn decode_hdr(client: &Client, wavelog_settings: WavelogSettings, buf:
 async fn rxhandler(client: &Client, wavelog_settings: WavelogSettings, rxdata: &[u8], _src: SocketAddr) {
     match decode_hdr(client, wavelog_settings, rxdata).await {
         Ok(_) => (),
-        Err(e) => println!("Error: {}", e),
+        Err(e) => error!("{}", e),
     }
 }
 
@@ -265,7 +265,7 @@ async fn wsjtx_rxloop(wavelog_settings: WavelogSettings, socket: UdpSocket, err_
         match socket.recv_from(&mut buf).await {
             Ok((amt, src)) => rxhandler(&client, wavelog_settings.clone(), &buf[0..amt], src).await,
             Err(e) => {
-                println!("Error: {}", e);
+                error!("UDP receive error: {}", e);
                 tokio::time::sleep(Duration::from_secs(err_timeout)).await;
             }
         }
@@ -277,7 +277,7 @@ pub fn wsjtx_thread(wsjtx_settings: WsjtxSettings, wavelog_settings: WavelogSett
     info!("Listening for WSJT-X QSO logs on: {url}");
     tokio::task::spawn(async move {
         match UdpSocket::bind(&url).await {
-            Err(e) => println!("couldn't create socket for WSJTX QSO logging: {e}"),
+            Err(e) => error!("couldn't create socket for WSJTX QSO logging: {e}"),
             Ok(socket) => wsjtx_rxloop(wavelog_settings, socket, wsjtx_settings.err_timeout).await,
         }
     });
