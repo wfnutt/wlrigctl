@@ -10,7 +10,7 @@ Based upon earlier work on clrigctl, by Martin Brodbeck, DG2SMB.
 """
 
 [dependencies]
-config = { version = "0.13.4", features = ["yaml"] }
+config = { version = "0.13.4", features = ["toml"] }
 env_logger = "0.10.1"
 home = "0.5.5"
 log = "0.4.20"
