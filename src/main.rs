@@ -9,11 +9,6 @@ use std::sync::Arc;
 
 use log::info;
 
-use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper::Response;
-pub type HttpResponse = Response<Full<Bytes>>;
-
 use crate::cat::CAT_thread;
 use crate::settings::Settings;
 use crate::wavelog::wavelog_thread;
