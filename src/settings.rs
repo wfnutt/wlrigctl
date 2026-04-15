@@ -2,6 +2,7 @@ use config::{Config, ConfigError, File};
 use serde_derive::Deserialize;
 use std::env;
 use std::path::PathBuf;
+use home::home_dir;
 
 use crate::cat::CatSettings;
 use crate::flrig::FlrigSettings;
@@ -19,7 +20,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-        let home_dir = env::home_dir()
+        let home_dir = home_dir()
             .ok_or_else(|| ConfigError::Message("No home directory found".into()))?;
 
         let app_name = env!("CARGO_PKG_NAME");
