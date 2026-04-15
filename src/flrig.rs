@@ -229,7 +229,7 @@ impl FLRig {
         // prospect that a new mode is returned that is unknown to flrig::Mode
         let existing_mode: Mode = existing_mode_str.parse::<Mode>().map_err(|_| {
             FlrigError::UnknownMode(UnknownModeError {
-                msg: "mode {existing_mode_str} is unknown".to_string(),
+                msg: format!("mode {existing_mode_str} is unknown"),
             })
         })?;
 
