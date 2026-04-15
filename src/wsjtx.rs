@@ -22,7 +22,7 @@ const WSJTX_MAGIC: u32 = 0xadbccbda;
 const SZ_HDR: usize = 12; // bytes of initial header
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct WSJTX_Heartbeat {
+pub struct WsjtxHeartbeat {
     id: String,
     max_schema_num: u32,
     version: String,
@@ -30,7 +30,7 @@ pub struct WSJTX_Heartbeat {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct WSJTX_Status {
+pub struct WsjtxStatus {
     id: String,
     dial_frequency_hz: u64,
     mode: String,
@@ -46,7 +46,7 @@ pub struct WSJTX_Status {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct WSJTX_Decode {
+pub struct WsjtxDecode {
     id: String,
     new: u8,
     time: u32,
@@ -60,16 +60,16 @@ pub struct WSJTX_Decode {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct WSJTX_LoggedADIF {
+pub struct WsjtxLoggedAdif {
     id: String,
     adif_text: String,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub enum WSJTXMsg {
-    Heartbeat(WSJTX_Heartbeat),
-    Status(WSJTX_Status),
-    Decode(WSJTX_Decode),
+pub enum WsjtxMsg {
+    Heartbeat(WsjtxHeartbeat),
+    Status(WsjtxStatus),
+    Decode(WsjtxDecode),
     Clear,
     Reply,
     QSOLogged,
@@ -79,13 +79,13 @@ pub enum WSJTXMsg {
     FreeText,
     WSPRDecode,
     Location,
-    LoggedADIF(WSJTX_LoggedADIF),
+    LoggedADIF(WsjtxLoggedAdif),
     HighlightCallsign,
     SwitchConfiguration,
     Configure,
 }
 
-impl Display for WSJTX_Heartbeat {
+impl Display for WsjtxHeartbeat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -95,7 +95,7 @@ impl Display for WSJTX_Heartbeat {
     }
 }
 
-impl Display for WSJTX_Status {
+impl Display for WsjtxStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -117,7 +117,7 @@ impl Display for WSJTX_Status {
     }
 }
 
-impl Display for WSJTX_Decode {
+impl Display for WsjtxDecode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -137,7 +137,7 @@ impl Display for WSJTX_Decode {
     }
 }
 
-impl Display for WSJTX_LoggedADIF {
+impl Display for WsjtxLoggedAdif {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -147,38 +147,38 @@ impl Display for WSJTX_LoggedADIF {
     }
 }
 
-impl Display for WSJTXMsg {
+impl Display for WsjtxMsg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WSJTXMsg::Heartbeat(msg) => write!(f, "{}", msg),
-            WSJTXMsg::Status(msg) => write!(f, "{}", msg),
-            WSJTXMsg::Decode(msg) => write!(f, "{}", msg),
-            WSJTXMsg::Clear => write!(f, "Clear"),
-            WSJTXMsg::Reply => write!(f, "Reply"),
-            WSJTXMsg::QSOLogged => write!(f, "QSO Logged"),
-            WSJTXMsg::Close => write!(f, "Close"),
-            WSJTXMsg::Replay => write!(f, "Replay"),
-            WSJTXMsg::HaltTx => write!(f, "Halt Tx"),
-            WSJTXMsg::FreeText => write!(f, "Free Text"),
-            WSJTXMsg::WSPRDecode => write!(f, "WSPR Decode"),
-            WSJTXMsg::Location => write!(f, "Location"),
-            WSJTXMsg::LoggedADIF(msg) => write!(f, "{}", msg),
-            WSJTXMsg::HighlightCallsign => write!(f, "Highlight Callsign"),
-            WSJTXMsg::SwitchConfiguration => write!(f, "Switch Configuration"),
-            WSJTXMsg::Configure => write!(f, "Configure"),
+            WsjtxMsg::Heartbeat(msg) => write!(f, "{}", msg),
+            WsjtxMsg::Status(msg) => write!(f, "{}", msg),
+            WsjtxMsg::Decode(msg) => write!(f, "{}", msg),
+            WsjtxMsg::Clear => write!(f, "Clear"),
+            WsjtxMsg::Reply => write!(f, "Reply"),
+            WsjtxMsg::QSOLogged => write!(f, "QSO Logged"),
+            WsjtxMsg::Close => write!(f, "Close"),
+            WsjtxMsg::Replay => write!(f, "Replay"),
+            WsjtxMsg::HaltTx => write!(f, "Halt Tx"),
+            WsjtxMsg::FreeText => write!(f, "Free Text"),
+            WsjtxMsg::WSPRDecode => write!(f, "WSPR Decode"),
+            WsjtxMsg::Location => write!(f, "Location"),
+            WsjtxMsg::LoggedADIF(msg) => write!(f, "{}", msg),
+            WsjtxMsg::HighlightCallsign => write!(f, "Highlight Callsign"),
+            WsjtxMsg::SwitchConfiguration => write!(f, "Switch Configuration"),
+            WsjtxMsg::Configure => write!(f, "Configure"),
         }
     }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct WSJTXData {
+pub struct WsjtxData {
     magic: u32,
     schema: u32,
-    msg: WSJTXMsg,
+    msg: WsjtxMsg,
 }
 
 #[derive(Debug)]
-pub enum WSJTXError {
+pub enum WsjtxError {
     DatagramTooShort(String),
     DeserializationFailure(String),
     BadMajick(String),
@@ -186,49 +186,46 @@ pub enum WSJTXError {
     QSOUploadFailed(String),
 }
 
-impl Display for WSJTXError {
+impl Display for WsjtxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WSJTXError::DatagramTooShort(msg) => write!(f, "DatagramTooShort: {}", msg),
-            WSJTXError::DeserializationFailure(msg) => write!(f, "DeserializationFailure: {}", msg),
-            WSJTXError::BadMajick(msg) => write!(f, "BadMajick: {}", msg),
-            WSJTXError::UnsupportedSchema(msg) => write!(f, "UnsupportedSchema: {}", msg),
-            WSJTXError::QSOUploadFailed(msg) => write!(f, "QSOUploadFailed: {}", msg),
+            WsjtxError::DatagramTooShort(msg) => write!(f, "DatagramTooShort: {}", msg),
+            WsjtxError::DeserializationFailure(msg) => write!(f, "DeserializationFailure: {}", msg),
+            WsjtxError::BadMajick(msg) => write!(f, "BadMajick: {}", msg),
+            WsjtxError::UnsupportedSchema(msg) => write!(f, "UnsupportedSchema: {}", msg),
+            WsjtxError::QSOUploadFailed(msg) => write!(f, "QSOUploadFailed: {}", msg),
         }
     }
 }
 
-impl std::error::Error for WSJTXError {}
+impl std::error::Error for WsjtxError {}
 
-pub async fn decode_hdr(client: &Client, wavelog_settings: WavelogSettings, buf: &[u8]) -> Result<(), WSJTXError> {
+pub async fn decode_hdr(client: &Client, wavelog_settings: WavelogSettings, buf: &[u8]) -> Result<(), WsjtxError> {
     if buf.len() < SZ_HDR {
         let errmsg = "Datagram too short for WSJTX header".to_string();
-        return Err(WSJTXError::DatagramTooShort(errmsg));
+        return Err(WsjtxError::DatagramTooShort(errmsg));
     }
 
     match bincode2::config()
         .big_endian()
         .string_length(U32)
         .array_length(U32)
-        .deserialize::<WSJTXData>(buf)
+        .deserialize::<WsjtxData>(buf)
     {
         Ok(wsjtx) => {
             if wsjtx.magic != WSJTX_MAGIC {
                 let errmsg = format!("Bad majick: {}", wsjtx.magic);
-                return Err(WSJTXError::BadMajick(errmsg));
+                return Err(WsjtxError::BadMajick(errmsg));
             }
             if wsjtx.schema != 2 {
                 let errmsg = format!("Schema: {}; only schema 2 so far", wsjtx.schema);
-                return Err(WSJTXError::UnsupportedSchema(errmsg));
+                return Err(WsjtxError::UnsupportedSchema(errmsg));
             }
             match wsjtx.msg {
-                //WSJTXMsg::Heartbeat(msg) => { println!("heartbeat"); Ok(())},
-                //WSJTXMsg::Status(msg)    => { println!("status"); Ok(())},
-                //WSJTXMsg::Decode(msg)    => { println!("decode"); Ok(())},
-                WSJTXMsg::LoggedADIF(msg) => {
+                WsjtxMsg::LoggedADIF(msg) => {
                     match upload_wsjtx_qso_data(client, &wavelog_settings, msg.adif_text).await {
                         Ok(_) => Ok(()),
-                        Err(_) => Err(WSJTXError::QSOUploadFailed("upload failure".to_string())),
+                        Err(_) => Err(WsjtxError::QSOUploadFailed("upload failure".to_string())),
                     }
                 }
                 msg => {
@@ -239,7 +236,7 @@ pub async fn decode_hdr(client: &Client, wavelog_settings: WavelogSettings, buf:
         }
         Err(_) => {
             let errmsg = "Couldn't deserialize datagram into WSJTX header".to_string();
-            Err(WSJTXError::DeserializationFailure(errmsg))
+            Err(WsjtxError::DeserializationFailure(errmsg))
         }
     }
 }
