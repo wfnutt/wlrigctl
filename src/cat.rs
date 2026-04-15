@@ -319,46 +319,124 @@ mod tests {
     //
     // Therefore we check either side of these boundaries
     //
-    // XXX: Finish these off:
+    // Each band gets four boundary checks:
+    //   - centre (must be in-window)
+    //   - lower edge: centre - LO_ALLOWANCE (must be in-window)
+    //   - just below lower edge (must NOT be in-window)
+    //   - upper edge: centre + HI_ALLOWANCE (must NOT be in-window, it's exclusive)
+    //
     // 160m: 1.840 MHz
-    // 80m: 3.575 MHz
-    // 40m: 7.074 MHz -- implemented
-    // 30m: 10.136 MHz
-    // 20m: 14.074 MHz
-    // 17m: 18.100 MHz
-    // 15m: 21.074 MHz
-    // 12m: 24.915 MHz
-    // 10m: 28.074 MHz
-    // 6m: 50.313 MHz
-    #[test]
-    fn ft8_40m() {
-        const FT8_40M: f64 = 7_074_000.0;
-        assert!(is_ft8(FT8_40M));
-    }
+    // 80m:  3.575 MHz
+    // 40m:  7.074 MHz
+    // 30m:  10.136 MHz
+    // 20m:  14.074 MHz
+    // 17m:  18.100 MHz
+    // 15m:  21.074 MHz
+    // 12m:  24.915 MHz
+    // 10m:  28.074 MHz
+    // 6m:   50.313 MHz
 
+    // --- 160m ---
     #[test]
-    fn ft8_40m_below() {
-        const FT8_40M_TOO_LOW: f64 = 7_071_999.9999;
-        assert!(!is_ft8(FT8_40M_TOO_LOW));
-    }
+    fn ft8_160m() { assert!(is_ft8(1_840_000.0)); }
+    #[test]
+    fn ft8_160m_lower_edge() { assert!(is_ft8(1_838_000.0)); }
+    #[test]
+    fn ft8_160m_below() { assert!(!is_ft8(1_837_999.9999)); }
+    #[test]
+    fn ft8_160m_above() { assert!(!is_ft8(1_843_000.0)); }
 
+    // --- 80m ---
     #[test]
-    fn ft8_40m_lower() {
-        const FT8_40M_LOWER: f64 = 7_072_000.0;
-        assert!(is_ft8(FT8_40M_LOWER));
-    }
+    fn ft8_80m() { assert!(is_ft8(3_575_000.0)); }
+    #[test]
+    fn ft8_80m_lower_edge() { assert!(is_ft8(3_573_000.0)); }
+    #[test]
+    fn ft8_80m_below() { assert!(!is_ft8(3_572_999.9999)); }
+    #[test]
+    fn ft8_80m_above() { assert!(!is_ft8(3_578_000.0)); }
 
+    // --- 40m ---
     #[test]
-    fn ft8_40m_upper() {
-        const FT8_40M_UPPER: f64 = 7_076_999.9999;
-        assert!(is_ft8(FT8_40M_UPPER));
-    }
+    fn ft8_40m() { assert!(is_ft8(7_074_000.0)); }
+    #[test]
+    fn ft8_40m_below() { assert!(!is_ft8(7_071_999.9999)); }
+    #[test]
+    fn ft8_40m_lower() { assert!(is_ft8(7_072_000.0)); }
+    #[test]
+    fn ft8_40m_upper() { assert!(is_ft8(7_076_999.9999)); }
+    #[test]
+    fn ft8_40m_above() { assert!(!is_ft8(7_077_000.0)); }
 
+    // --- 30m ---
     #[test]
-    fn ft8_40m_above() {
-        const FT8_40M_TOO_HIGH: f64 = 7_077_000.0;
-        assert!(!is_ft8(FT8_40M_TOO_HIGH));
-    }
+    fn ft8_30m() { assert!(is_ft8(10_136_000.0)); }
+    #[test]
+    fn ft8_30m_lower_edge() { assert!(is_ft8(10_134_000.0)); }
+    #[test]
+    fn ft8_30m_below() { assert!(!is_ft8(10_133_999.9999)); }
+    #[test]
+    fn ft8_30m_above() { assert!(!is_ft8(10_139_000.0)); }
+
+    // --- 20m ---
+    #[test]
+    fn ft8_20m() { assert!(is_ft8(14_074_000.0)); }
+    #[test]
+    fn ft8_20m_lower_edge() { assert!(is_ft8(14_072_000.0)); }
+    #[test]
+    fn ft8_20m_below() { assert!(!is_ft8(14_071_999.9999)); }
+    #[test]
+    fn ft8_20m_above() { assert!(!is_ft8(14_077_000.0)); }
+
+    // --- 17m ---
+    #[test]
+    fn ft8_17m() { assert!(is_ft8(18_100_000.0)); }
+    #[test]
+    fn ft8_17m_lower_edge() { assert!(is_ft8(18_098_000.0)); }
+    #[test]
+    fn ft8_17m_below() { assert!(!is_ft8(18_097_999.9999)); }
+    #[test]
+    fn ft8_17m_above() { assert!(!is_ft8(18_103_000.0)); }
+
+    // --- 15m ---
+    #[test]
+    fn ft8_15m() { assert!(is_ft8(21_074_000.0)); }
+    #[test]
+    fn ft8_15m_lower_edge() { assert!(is_ft8(21_072_000.0)); }
+    #[test]
+    fn ft8_15m_below() { assert!(!is_ft8(21_071_999.9999)); }
+    #[test]
+    fn ft8_15m_above() { assert!(!is_ft8(21_077_000.0)); }
+
+    // --- 12m ---
+    #[test]
+    fn ft8_12m() { assert!(is_ft8(24_915_000.0)); }
+    #[test]
+    fn ft8_12m_lower_edge() { assert!(is_ft8(24_913_000.0)); }
+    #[test]
+    fn ft8_12m_below() { assert!(!is_ft8(24_912_999.9999)); }
+    #[test]
+    fn ft8_12m_above() { assert!(!is_ft8(24_918_000.0)); }
+
+    // --- 10m ---
+    #[test]
+    fn ft8_10m() { assert!(is_ft8(28_074_000.0)); }
+    #[test]
+    fn ft8_10m_lower_edge() { assert!(is_ft8(28_072_000.0)); }
+    #[test]
+    fn ft8_10m_below() { assert!(!is_ft8(28_071_999.9999)); }
+    #[test]
+    fn ft8_10m_above() { assert!(!is_ft8(28_077_000.0)); }
+
+    // --- 6m ---
+    #[test]
+    fn ft8_6m() { assert!(is_ft8(50_313_000.0)); }
+    #[test]
+    fn ft8_6m_lower_edge() { assert!(is_ft8(50_311_000.0)); }
+    #[test]
+    fn ft8_6m_below() { assert!(!is_ft8(50_310_999.9999)); }
+    #[test]
+    fn ft8_6m_above() { assert!(!is_ft8(50_316_000.0)); }
 
     //////////////////////////////////////////////////////////////
     // Tests for Bandlist/Cluster mode/frequency conversions to FLRig mode
