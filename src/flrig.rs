@@ -284,3 +284,48 @@ fn rig_power_watts(power: u32, max_power: u32, max_watts: u32) -> String {
     let watts: f32 = power as f32 * max_watts as f32 / max_power as f32;
     watts.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_settings() -> FlrigSettings {
+        FlrigSettings {
+            host: "http://127.0.0.1".to_string(),
+            port: 19999,
+            maxpower: 100,
+            cwbandwidth: None,
+        }
+    }
+
+    #[test]
+    fn flrig_new_stores_identifier() {
+        let rig = FLRig::new(test_settings(), "IC-703".to_string());
+        assert_eq!(rig.get_identifier(), "IC-703");
+    }
+
+    #[tokio::test]
+    async fn flrig_bad_url_returns_error() {
+        // Port 19999 has nothing listening; the connection should be refused.
+        let rig = FLRig::new(test_settings(), "IC-703".to_string());
+        assert!(rig.get_vfo().await.is_err());
+    }
+
+    #[test]
+    fn rig_power_zero_max_returns_zero() {
+        // Must return "0" rather than panicking with divide-by-zero.
+        assert_eq!(rig_power_watts(50, 0, 100), "0");
+    }
+
+    #[test]
+    fn rig_power_full_scale() {
+        let watts: f32 = rig_power_watts(100, 100, 100).parse().unwrap();
+        assert_eq!(watts, 100.0);
+    }
+
+    #[test]
+    fn rig_power_half_scale() {
+        let watts: f32 = rig_power_watts(50, 100, 100).parse().unwrap();
+        assert_eq!(watts, 50.0);
+    }
+}
