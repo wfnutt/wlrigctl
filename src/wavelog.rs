@@ -1,5 +1,5 @@
 use crate::flrig;
-use log::info;
+use log::{debug, info};
 use reqwest::{Client, Error};
 use serde::Serialize;
 use serde_derive::Deserialize;
@@ -91,8 +91,11 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>) {
                         radio_data_current.mode = radio_data_new.mode;
                         radio_data_current.power = radio_data_new.power;
 
-                        let _result =
-                            upload_live_radio_data(&client, &settings, &radio_data_current).await;
+                        if let Err(e) =
+                            upload_live_radio_data(&client, &settings, &radio_data_current).await
+                        {
+                            debug!("Wavelog upload failed (may be transient): {e}");
+                        }
                     }
                 }
                 Err(e) => info!("Got err:{:#?}", e),
