@@ -387,7 +387,7 @@ mod tests {
 
         for wl_mode in ALL_WL_MODES {
             assert_eq!(
-                wavelog_bandlist_to_flrig_mode(FT8_40M, wl_mode),
+                wavelog_to_flrig_mode(FT8_40M, wl_mode),
                 Mode::D_USB
             );
         }
@@ -405,7 +405,7 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Cw),
+                wavelog_to_flrig_mode(freq, WavelogMode::Cw),
                 Mode::CW
             );
         }
@@ -423,7 +423,7 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Phone),
+                wavelog_to_flrig_mode(freq, WavelogMode::Phone),
                 Mode::LSB
             );
         }
@@ -441,7 +441,7 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::LSB),
+                wavelog_to_flrig_mode(freq, WavelogMode::LSB),
                 Mode::LSB
             );
         }
@@ -459,7 +459,7 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::USB),
+                wavelog_to_flrig_mode(freq, WavelogMode::USB),
                 Mode::USB
             );
         }
@@ -477,12 +477,12 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Digi),
+                wavelog_to_flrig_mode(freq, WavelogMode::Digi),
                 Mode::RTTY
             );
 
             assert_eq!(
-                wavelog_bandlist_to_flrig_mode(freq, WavelogMode::Rtty),
+                wavelog_to_flrig_mode(freq, WavelogMode::Rtty),
                 Mode::RTTY
             );
         }
