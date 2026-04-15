@@ -2547,6 +2547,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "tokio",
+ "tokio-util",
  "url",
 ]
 

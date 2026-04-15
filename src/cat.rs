@@ -1,4 +1,5 @@
 use log::{debug, info};
+use tokio_util::sync::CancellationToken;
 use serde_json::json;
 
 use hyper::server::conn::http1;
@@ -268,6 +269,7 @@ async fn qsy(
 pub async fn CAT_thread(
     settings: CatSettings,
     rig: &Arc<flrig::FLRig>,
+    token: CancellationToken,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Listen on TCP socket for someone in Cloudlog/Wavelog clicking the bandmap
     let cat_ipv4: IpAddr =
@@ -285,7 +287,13 @@ pub async fn CAT_thread(
 
     loop {
         // accept a series of TCP connections arising from clicks on bandmap in Cloudlog/Wavelog
-        let (stream, _) = listener.accept().await?;
+        let (stream, _) = tokio::select! {
+            _ = token.cancelled() => {
+                info!("CAT thread shutting down");
+                return Ok(());
+            }
+            result = listener.accept() => result?,
+        };
         let io = TokioIo::new(stream);
         let rig_for_qsy = rig.clone();
         tokio::task::spawn(async move {

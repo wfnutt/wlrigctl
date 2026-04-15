@@ -8,6 +8,7 @@ use std::fmt::Display;
 use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 use tokio::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 // Settings from config file
 #[derive(Debug, Deserialize)]
@@ -248,28 +249,39 @@ async fn rxhandler(client: &Client, wavelog_settings: WavelogSettings, rxdata: &
     }
 }
 
-async fn wsjtx_rxloop(wavelog_settings: WavelogSettings, socket: UdpSocket, err_timeout: u64) {
+async fn wsjtx_rxloop(wavelog_settings: WavelogSettings, socket: UdpSocket, err_timeout: u64, token: CancellationToken) {
     let client = Client::new();
     loop {
         let mut buf = [0; SZ_RXBUF];
 
-        match socket.recv_from(&mut buf).await {
-            Ok((amt, src)) => rxhandler(&client, wavelog_settings.clone(), &buf[0..amt], src).await,
-            Err(e) => {
-                error!("UDP receive error: {}", e);
-                tokio::time::sleep(Duration::from_secs(err_timeout)).await;
+        tokio::select! {
+            _ = token.cancelled() => {
+                info!("wsjtx thread shutting down");
+                return;
+            }
+            result = socket.recv_from(&mut buf) => {
+                match result {
+                    Ok((amt, src)) => rxhandler(&client, wavelog_settings.clone(), &buf[0..amt], src).await,
+                    Err(e) => {
+                        error!("UDP receive error: {}", e);
+                        tokio::select! {
+                            _ = token.cancelled() => return,
+                            _ = tokio::time::sleep(Duration::from_secs(err_timeout)) => {}
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-pub fn wsjtx_thread(wsjtx_settings: WsjtxSettings, wavelog_settings: WavelogSettings) {
+pub fn wsjtx_thread(wsjtx_settings: WsjtxSettings, wavelog_settings: WavelogSettings, token: CancellationToken) {
     let url = format!("{0}:{1}", wsjtx_settings.host, wsjtx_settings.port);
     info!("Listening for WSJT-X QSO logs on: {url}");
     tokio::task::spawn(async move {
         match UdpSocket::bind(&url).await {
             Err(e) => error!("couldn't create socket for WSJTX QSO logging: {e}"),
-            Ok(socket) => wsjtx_rxloop(wavelog_settings, socket, wsjtx_settings.err_timeout).await,
+            Ok(socket) => wsjtx_rxloop(wavelog_settings, socket, wsjtx_settings.err_timeout, token).await,
         }
     });
 }

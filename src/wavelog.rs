@@ -6,6 +6,7 @@ use serde_derive::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 // settings from .toml file
 #[derive(Debug, Deserialize, Clone)]
@@ -62,7 +63,7 @@ pub async fn upload_wsjtx_qso_data(
     Ok(())
 }
 
-pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>) {
+pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>, token: CancellationToken) {
     let mut radio_data_current = RadioData {
         key: settings.key.clone(),
         radio: settings.identifier.clone(),
@@ -101,7 +102,13 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>) {
                 Err(e) => info!("Got err:{:#?}", e),
             }
 
-            tokio::time::sleep(Duration::from_millis(settings.interval)).await;
+            tokio::select! {
+                _ = token.cancelled() => {
+                    info!("wavelog thread shutting down");
+                    return;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(settings.interval)) => {}
+            }
         }
     });
 }
