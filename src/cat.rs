@@ -85,13 +85,8 @@ fn is_ft8(freq_hz: f64) -> bool {
         50_313_000.0,
     ];
 
-    for ft8_lower in FT8 {
-        if freq_hz >= ft8_lower - LO_ALLOWANCE && freq_hz < ft8_lower + HI_ALLOWANCE {
-            return true;
-        }
-    }
-
-    false
+    FT8.iter()
+        .any(|&f| freq_hz >= f - LO_ALLOWANCE && freq_hz < f + HI_ALLOWANCE)
 }
 
 #[derive(Debug)]
