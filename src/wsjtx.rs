@@ -1,6 +1,7 @@
 use crate::wavelog::{upload_wsjtx_qso_data, WavelogSettings};
 use bincode2::LengthOption::U32;
 use log::{debug, info};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
@@ -205,7 +206,7 @@ impl Display for WSJTXError {
 
 impl std::error::Error for WSJTXError {}
 
-pub async fn decode_hdr(wavelog_settings: WavelogSettings, buf: &[u8]) -> Result<(), WSJTXError> {
+pub async fn decode_hdr(client: &Client, wavelog_settings: WavelogSettings, buf: &[u8]) -> Result<(), WSJTXError> {
     if buf.len() < SZ_HDR {
         let errmsg = "Datagram too short for WSJTX header".to_string();
         return Err(WSJTXError::DatagramTooShort(errmsg));
@@ -231,7 +232,7 @@ pub async fn decode_hdr(wavelog_settings: WavelogSettings, buf: &[u8]) -> Result
                 //WSJTXMsg::Status(msg)    => { println!("status"); Ok(())},
                 //WSJTXMsg::Decode(msg)    => { println!("decode"); Ok(())},
                 WSJTXMsg::LoggedADIF(msg) => {
-                    match upload_wsjtx_qso_data(wavelog_settings, msg.adif_text).await {
+                    match upload_wsjtx_qso_data(client, &wavelog_settings, msg.adif_text).await {
                         Ok(_) => Ok(()),
                         Err(_) => Err(WSJTXError::QSOUploadFailed("upload failure".to_string())),
                     }
@@ -249,19 +250,20 @@ pub async fn decode_hdr(wavelog_settings: WavelogSettings, buf: &[u8]) -> Result
     }
 }
 
-async fn rxhandler(wavelog_settings: WavelogSettings, rxdata: &[u8], _src: SocketAddr) {
-    match decode_hdr(wavelog_settings, rxdata).await {
+async fn rxhandler(client: &Client, wavelog_settings: WavelogSettings, rxdata: &[u8], _src: SocketAddr) {
+    match decode_hdr(client, wavelog_settings, rxdata).await {
         Ok(_) => (),
         Err(e) => println!("Error: {}", e),
     }
 }
 
 async fn wsjtx_rxloop(wavelog_settings: WavelogSettings, socket: UdpSocket, err_timeout: u64) {
+    let client = Client::new();
     loop {
         let mut buf = [0; SZ_RXBUF];
 
         match socket.recv_from(&mut buf).await {
-            Ok((amt, src)) => rxhandler(wavelog_settings.clone(), &buf[0..amt], src).await,
+            Ok((amt, src)) => rxhandler(&client, wavelog_settings.clone(), &buf[0..amt], src).await,
             Err(e) => {
                 println!("Error: {}", e);
                 tokio::time::sleep(Duration::from_secs(err_timeout)).await;

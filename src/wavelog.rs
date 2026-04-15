@@ -28,14 +28,13 @@ pub struct RadioData {
 }
 
 async fn upload_live_radio_data(
-    settings: WavelogSettings,
+    client: &Client,
+    settings: &WavelogSettings,
     radio_data: &RadioData,
 ) -> Result<(), Error> {
-    let client = Client::new();
-
     client
-        .post(settings.url.clone())
-        .json(&radio_data)
+        .post(&settings.url)
+        .json(radio_data)
         .send()
         .await?;
 
@@ -43,20 +42,19 @@ async fn upload_live_radio_data(
 }
 
 pub async fn upload_wsjtx_qso_data(
-    settings: WavelogSettings,
+    client: &Client,
+    settings: &WavelogSettings,
     adif_text: String,
 ) -> Result<(), Error> {
-    let client = Client::new();
-
     let qso_data: Value = json!({
-        "key": settings.key.clone(),
-        "station_profile_id": settings.station_profile_id.clone(),
+        "key": &settings.key,
+        "station_profile_id": settings.station_profile_id,
         "type": "adif",
         "string": adif_text
     });
 
     client
-        .post(settings.qso_url.clone())
+        .post(&settings.qso_url)
         .json(&qso_data)
         .send()
         .await?;
@@ -74,12 +72,10 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>) {
     };
 
     tokio::task::spawn(async move {
+        let client = Client::new();
         loop {
             // MIGHT be able to call rig.get_update() here; it'll return NIL if nothing changed
             // XXX: FIXME
-            // We should also aim to reuse the single TCP connection for repeated requests, rather
-            // than a new TCP socket request for every poll (Yuck!)
-            //
             // If get_update() says somthing happened, try using system.multicall() to get multiple
             // fields from flrig in one go.
             //
@@ -95,10 +91,8 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>) {
                         radio_data_current.mode = radio_data_new.mode;
                         radio_data_current.power = radio_data_new.power;
 
-                        // If attempt to push VFO info to wavelog fails this time,
-                        // maybe the failure might be transient, and we should try next time
                         let _result =
-                            upload_live_radio_data(settings.clone(), &radio_data_current).await;
+                            upload_live_radio_data(&client, &settings, &radio_data_current).await;
                     }
                 }
                 Err(e) => info!("Got err:{:#?}", e),
