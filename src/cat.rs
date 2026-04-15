@@ -28,6 +28,9 @@ pub struct CatSettings {
     pub host: String,
     pub port: u16,
     pub yaesu: bool,
+    /// FT8 dial frequencies in Hz. Overrides the built-in list when present.
+    /// Example: ft8_frequencies = [1840000, 3575000, 7074000]
+    pub ft8_frequencies: Option<Vec<u64>>,
 }
 
 #[allow(clippy::upper_case_acronyms)]
@@ -61,37 +64,39 @@ impl FromStr for WavelogMode {
     }
 }
 
+// Default FT8 dial frequencies (Hz).
+// Overridable via ft8_frequencies in the [CAT] config section.
 //
-// If dial frequency is between any of these and +3kHz, then mode should probably be set for FT8
-// See simple unit tests at end of file.
 // 160m: 1.840 MHz
-// 80m: 3.575 MHz
-// 40m: 7.074 MHz
-// 30m: 10.136 MHz
-// 20m: 14.074 MHz
-// 17m: 18.100 MHz
-// 15m: 21.074 MHz
-// 12m: 24.915 MHz
-// 10m: 28.074 MHz
-// 6m: 50.313 MHz
-fn is_ft8(freq_hz: f64) -> bool {
+// 80m:  3.575 MHz
+// 40m:  7.074 MHz
+// 30m:  10.136 MHz
+// 20m:  14.074 MHz
+// 17m:  18.100 MHz
+// 15m:  21.074 MHz
+// 12m:  24.915 MHz
+// 10m:  28.074 MHz
+// 6m:   50.313 MHz
+const DEFAULT_FT8_FREQS: [f64; 10] = [
+    1_840_000.0,
+    3_575_000.0,
+    7_074_000.0,
+    10_136_000.0,
+    14_074_000.0,
+    18_100_000.0,
+    21_074_000.0,
+    24_915_000.0,
+    28_074_000.0,
+    50_313_000.0,
+];
+
+//
+// If dial frequency is within ±2–3 kHz of any entry in `freqs`, the mode should be FT8.
+// See unit tests at end of file.
+fn is_ft8(freq_hz: f64, freqs: &[f64]) -> bool {
     const LO_ALLOWANCE: f64 = 2_000.0;
     const HI_ALLOWANCE: f64 = 3_000.0;
-    const FT8: [f64; 10] = [
-        1_840_000.0,
-        3_575_000.0,
-        7_074_000.0,
-        10_136_000.0,
-        14_074_000.0,
-        18_100_000.0,
-        21_074_000.0,
-        24_915_000.0,
-        28_074_000.0,
-        50_313_000.0,
-    ];
-
-    FT8.iter()
-        .any(|&f| freq_hz >= f - LO_ALLOWANCE && freq_hz < f + HI_ALLOWANCE)
+    freqs.iter().any(|&f| freq_hz >= f - LO_ALLOWANCE && freq_hz < f + HI_ALLOWANCE)
 }
 
 #[derive(Debug)]
@@ -173,8 +178,8 @@ fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, HttpResponse> {
 // This is great for the GUI, but rubbish for XMLRPC.
 // So on a Yaesu FTDX10 for example, there is no "CW" mode at all; one must explicitly select
 // either CW-U or CW-L. Similarly, there's RTTY-U or RTTY-L as well...
-fn wavelog_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
-    if is_ft8(freq) {
+fn wavelog_to_flrig_mode(freq: f64, mode: WavelogMode, ft8_freqs: &[f64]) -> Mode {
+    if is_ft8(freq, ft8_freqs) {
         Mode::D_USB
     } else {
         match mode {
@@ -197,8 +202,8 @@ fn wavelog_to_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
 }
 
 // Yaesu version to handle explicit mode naming (-U vs -L)
-fn wavelog_to_yaesu_flrig_mode(freq: f64, mode: WavelogMode) -> Mode {
-    if is_ft8(freq) {
+fn wavelog_to_yaesu_flrig_mode(freq: f64, mode: WavelogMode, ft8_freqs: &[f64]) -> Mode {
+    if is_ft8(freq, ft8_freqs) {
         Mode::DATA_U
     } else {
         match mode {
@@ -224,6 +229,7 @@ async fn qsy(
     rig: Arc<flrig::FLRig>,
     req: Request<hyper::body::Incoming>,
     yaesu: bool,
+    ft8_freqs: Arc<[f64]>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     info!("qsy() called with: {}", &req.uri().path());
 
@@ -236,8 +242,8 @@ async fn qsy(
     let freq: f64 = qsyinfo.freq;
 
     let mode = match yaesu {
-        true => wavelog_to_yaesu_flrig_mode(freq, qsyinfo.mode),
-        false => wavelog_to_flrig_mode(freq, qsyinfo.mode),
+        true => wavelog_to_yaesu_flrig_mode(freq, qsyinfo.mode, &ft8_freqs),
+        false => wavelog_to_flrig_mode(freq, qsyinfo.mode, &ft8_freqs),
     };
 
     if let Err(e) = rig.set_vfo(freq).await {
@@ -288,6 +294,12 @@ pub async fn CAT_thread(
 
     let yaesu: bool = settings.yaesu;
 
+    // Build the FT8 frequency list: use the config override if provided, otherwise defaults.
+    let ft8_freqs: Arc<[f64]> = match settings.ft8_frequencies {
+        Some(freqs) => freqs.iter().map(|&f| f as f64).collect::<Vec<f64>>().into(),
+        None => Arc::from(DEFAULT_FT8_FREQS.as_slice()),
+    };
+
     info!("Listening for CAT requests from Wavelog on: {:#?}", addr);
     info!("Yaesu mode is: {:#?}", yaesu);
 
@@ -304,12 +316,13 @@ pub async fn CAT_thread(
         };
         let io = TokioIo::new(stream);
         let rig_for_qsy = rig.clone();
+        let ft8_freqs_for_qsy = ft8_freqs.clone();
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .half_close(true)
                 .serve_connection(
                     io,
-                    service_fn(move |req| qsy(rig_for_qsy.clone(), req, yaesu)),
+                    service_fn(move |req| qsy(rig_for_qsy.clone(), req, yaesu, ft8_freqs_for_qsy.clone())),
                 )
                 .await
             {
@@ -330,7 +343,7 @@ mod tests {
     //////////////////////////////////////////////////////////////
     // This file assumes the following centres of activity for FT8
     // Further more, the is_ft8() function checks for:
-    //     * >= centre + 2kHz
+    //     * >= centre - 2kHz
     //     * <  centre + 3kHz
     //
     // Therefore we check either side of these boundaries
@@ -354,105 +367,105 @@ mod tests {
 
     // --- 160m ---
     #[test]
-    fn ft8_160m() { assert!(is_ft8(1_840_000.0)); }
+    fn ft8_160m() { assert!(is_ft8(1_840_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_160m_lower_edge() { assert!(is_ft8(1_838_000.0)); }
+    fn ft8_160m_lower_edge() { assert!(is_ft8(1_838_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_160m_below() { assert!(!is_ft8(1_837_999.9999)); }
+    fn ft8_160m_below() { assert!(!is_ft8(1_837_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_160m_above() { assert!(!is_ft8(1_843_000.0)); }
+    fn ft8_160m_above() { assert!(!is_ft8(1_843_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 80m ---
     #[test]
-    fn ft8_80m() { assert!(is_ft8(3_575_000.0)); }
+    fn ft8_80m() { assert!(is_ft8(3_575_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_80m_lower_edge() { assert!(is_ft8(3_573_000.0)); }
+    fn ft8_80m_lower_edge() { assert!(is_ft8(3_573_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_80m_below() { assert!(!is_ft8(3_572_999.9999)); }
+    fn ft8_80m_below() { assert!(!is_ft8(3_572_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_80m_above() { assert!(!is_ft8(3_578_000.0)); }
+    fn ft8_80m_above() { assert!(!is_ft8(3_578_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 40m ---
     #[test]
-    fn ft8_40m() { assert!(is_ft8(7_074_000.0)); }
+    fn ft8_40m() { assert!(is_ft8(7_074_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_40m_below() { assert!(!is_ft8(7_071_999.9999)); }
+    fn ft8_40m_below() { assert!(!is_ft8(7_071_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_40m_lower() { assert!(is_ft8(7_072_000.0)); }
+    fn ft8_40m_lower() { assert!(is_ft8(7_072_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_40m_upper() { assert!(is_ft8(7_076_999.9999)); }
+    fn ft8_40m_upper() { assert!(is_ft8(7_076_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_40m_above() { assert!(!is_ft8(7_077_000.0)); }
+    fn ft8_40m_above() { assert!(!is_ft8(7_077_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 30m ---
     #[test]
-    fn ft8_30m() { assert!(is_ft8(10_136_000.0)); }
+    fn ft8_30m() { assert!(is_ft8(10_136_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_30m_lower_edge() { assert!(is_ft8(10_134_000.0)); }
+    fn ft8_30m_lower_edge() { assert!(is_ft8(10_134_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_30m_below() { assert!(!is_ft8(10_133_999.9999)); }
+    fn ft8_30m_below() { assert!(!is_ft8(10_133_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_30m_above() { assert!(!is_ft8(10_139_000.0)); }
+    fn ft8_30m_above() { assert!(!is_ft8(10_139_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 20m ---
     #[test]
-    fn ft8_20m() { assert!(is_ft8(14_074_000.0)); }
+    fn ft8_20m() { assert!(is_ft8(14_074_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_20m_lower_edge() { assert!(is_ft8(14_072_000.0)); }
+    fn ft8_20m_lower_edge() { assert!(is_ft8(14_072_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_20m_below() { assert!(!is_ft8(14_071_999.9999)); }
+    fn ft8_20m_below() { assert!(!is_ft8(14_071_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_20m_above() { assert!(!is_ft8(14_077_000.0)); }
+    fn ft8_20m_above() { assert!(!is_ft8(14_077_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 17m ---
     #[test]
-    fn ft8_17m() { assert!(is_ft8(18_100_000.0)); }
+    fn ft8_17m() { assert!(is_ft8(18_100_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_17m_lower_edge() { assert!(is_ft8(18_098_000.0)); }
+    fn ft8_17m_lower_edge() { assert!(is_ft8(18_098_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_17m_below() { assert!(!is_ft8(18_097_999.9999)); }
+    fn ft8_17m_below() { assert!(!is_ft8(18_097_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_17m_above() { assert!(!is_ft8(18_103_000.0)); }
+    fn ft8_17m_above() { assert!(!is_ft8(18_103_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 15m ---
     #[test]
-    fn ft8_15m() { assert!(is_ft8(21_074_000.0)); }
+    fn ft8_15m() { assert!(is_ft8(21_074_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_15m_lower_edge() { assert!(is_ft8(21_072_000.0)); }
+    fn ft8_15m_lower_edge() { assert!(is_ft8(21_072_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_15m_below() { assert!(!is_ft8(21_071_999.9999)); }
+    fn ft8_15m_below() { assert!(!is_ft8(21_071_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_15m_above() { assert!(!is_ft8(21_077_000.0)); }
+    fn ft8_15m_above() { assert!(!is_ft8(21_077_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 12m ---
     #[test]
-    fn ft8_12m() { assert!(is_ft8(24_915_000.0)); }
+    fn ft8_12m() { assert!(is_ft8(24_915_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_12m_lower_edge() { assert!(is_ft8(24_913_000.0)); }
+    fn ft8_12m_lower_edge() { assert!(is_ft8(24_913_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_12m_below() { assert!(!is_ft8(24_912_999.9999)); }
+    fn ft8_12m_below() { assert!(!is_ft8(24_912_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_12m_above() { assert!(!is_ft8(24_918_000.0)); }
+    fn ft8_12m_above() { assert!(!is_ft8(24_918_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 10m ---
     #[test]
-    fn ft8_10m() { assert!(is_ft8(28_074_000.0)); }
+    fn ft8_10m() { assert!(is_ft8(28_074_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_10m_lower_edge() { assert!(is_ft8(28_072_000.0)); }
+    fn ft8_10m_lower_edge() { assert!(is_ft8(28_072_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_10m_below() { assert!(!is_ft8(28_071_999.9999)); }
+    fn ft8_10m_below() { assert!(!is_ft8(28_071_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_10m_above() { assert!(!is_ft8(28_077_000.0)); }
+    fn ft8_10m_above() { assert!(!is_ft8(28_077_000.0, &DEFAULT_FT8_FREQS)); }
 
     // --- 6m ---
     #[test]
-    fn ft8_6m() { assert!(is_ft8(50_313_000.0)); }
+    fn ft8_6m() { assert!(is_ft8(50_313_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_6m_lower_edge() { assert!(is_ft8(50_311_000.0)); }
+    fn ft8_6m_lower_edge() { assert!(is_ft8(50_311_000.0, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_6m_below() { assert!(!is_ft8(50_310_999.9999)); }
+    fn ft8_6m_below() { assert!(!is_ft8(50_310_999.9999, &DEFAULT_FT8_FREQS)); }
     #[test]
-    fn ft8_6m_above() { assert!(!is_ft8(50_316_000.0)); }
+    fn ft8_6m_above() { assert!(!is_ft8(50_316_000.0, &DEFAULT_FT8_FREQS)); }
 
     //////////////////////////////////////////////////////////////
     // Tests for Bandlist/Cluster mode/frequency conversions to FLRig mode
@@ -474,7 +487,7 @@ mod tests {
 
         for wl_mode in ALL_WL_MODES {
             assert_eq!(
-                wavelog_to_flrig_mode(FT8_40M, wl_mode),
+                wavelog_to_flrig_mode(FT8_40M, wl_mode, &DEFAULT_FT8_FREQS),
                 Mode::D_USB
             );
         }
@@ -492,7 +505,7 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::Cw),
+                wavelog_to_flrig_mode(freq, WavelogMode::Cw, &DEFAULT_FT8_FREQS),
                 Mode::CW
             );
         }
@@ -510,7 +523,7 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::Phone),
+                wavelog_to_flrig_mode(freq, WavelogMode::Phone, &DEFAULT_FT8_FREQS),
                 Mode::LSB
             );
         }
@@ -528,7 +541,7 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::LSB),
+                wavelog_to_flrig_mode(freq, WavelogMode::LSB, &DEFAULT_FT8_FREQS),
                 Mode::LSB
             );
         }
@@ -546,7 +559,7 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::USB),
+                wavelog_to_flrig_mode(freq, WavelogMode::USB, &DEFAULT_FT8_FREQS),
                 Mode::USB
             );
         }
@@ -564,12 +577,12 @@ mod tests {
 
         for freq in BAND_40M {
             assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::Digi),
+                wavelog_to_flrig_mode(freq, WavelogMode::Digi, &DEFAULT_FT8_FREQS),
                 Mode::RTTY
             );
 
             assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::Rtty),
+                wavelog_to_flrig_mode(freq, WavelogMode::Rtty, &DEFAULT_FT8_FREQS),
                 Mode::RTTY
             );
         }
@@ -578,7 +591,15 @@ mod tests {
     #[test]
     fn flrig_am_fm() {
         // AM and FM should map through regardless of frequency (no FT8 override applies)
-        assert_eq!(wavelog_to_flrig_mode(7_200_000.0, WavelogMode::Am), Mode::AM);
-        assert_eq!(wavelog_to_flrig_mode(29_600_000.0, WavelogMode::Fm), Mode::FM);
+        assert_eq!(wavelog_to_flrig_mode(7_200_000.0, WavelogMode::Am, &DEFAULT_FT8_FREQS), Mode::AM);
+        assert_eq!(wavelog_to_flrig_mode(29_600_000.0, WavelogMode::Fm, &DEFAULT_FT8_FREQS), Mode::FM);
+    }
+
+    #[test]
+    fn is_ft8_custom_freqs() {
+        // With a custom single-entry list, only that frequency window should match.
+        let custom: [f64; 1] = [14_074_000.0];
+        assert!(is_ft8(14_074_000.0, &custom));
+        assert!(!is_ft8(7_074_000.0, &custom));
     }
 }
