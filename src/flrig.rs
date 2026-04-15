@@ -264,7 +264,9 @@ impl FLRig {
 }
 
 fn rig_power_watts(power: u32, max_power: u32, max_watts: u32) -> String {
+    if max_power == 0 {
+        return "0".to_string();
+    }
     let watts: f32 = power as f32 * max_watts as f32 / max_power as f32;
-
     watts.to_string()
 }
