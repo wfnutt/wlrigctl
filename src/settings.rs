@@ -7,6 +7,7 @@ use home::home_dir;
 use crate::cat::CatSettings;
 use crate::flrig::FlrigSettings;
 use crate::wavelog::WavelogSettings;
+use crate::ws::WsSettings;
 use crate::wsjtx::WsjtxSettings;
 
 #[derive(Debug, Deserialize)]
@@ -17,6 +18,8 @@ pub struct Settings {
     pub cat: CatSettings,
     #[serde(rename = "WSJTX")]
     pub wsjtx: WsjtxSettings,
+    /// Optional [websocket] section; absent means WebSocket is disabled.
+    pub websocket: Option<WsSettings>,
 }
 
 impl Settings {

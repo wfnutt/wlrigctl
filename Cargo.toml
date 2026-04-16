@@ -29,6 +29,7 @@ serde_json = "1.0.145"
 bincode2 = "2.0.1"
 tokio-util = { version = "0.7" }
 tokio-tungstenite = "0.21"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 
 [profile.release]
 strip = "symbols"

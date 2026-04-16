@@ -2631,6 +2631,7 @@ dependencies = [
  "dxr",
  "dxr_client",
  "env_logger",
+ "futures-util",
  "home",
  "http-body-util",
  "hyper 1.8.1",

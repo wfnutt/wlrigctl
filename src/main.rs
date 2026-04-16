@@ -2,6 +2,7 @@ mod cat;
 mod flrig;
 mod settings;
 mod wavelog;
+mod ws;
 mod wsjtx;
 
 use std::process;
@@ -14,6 +15,7 @@ use tokio_util::sync::CancellationToken;
 use crate::cat::CAT_thread;
 use crate::settings::Settings;
 use crate::wavelog::wavelog_thread;
+use crate::ws::ws_thread;
 use crate::wsjtx::wsjtx_thread;
 
 #[cfg(unix)]
@@ -59,6 +61,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Separate thread for someone logging from WSJTX via UDP on port 2237
     wsjtx_thread(settings.wsjtx, settings.wavelog, token.clone());
+
+    // Optional WebSocket server: push live rig state to browser clients
+    if let Some(ws_settings) = settings.websocket {
+        ws_thread(ws_settings, ws_tx.clone(), token.clone());
+    }
 
     // Keep the current thread for CAT control requests from Wavelog
     // We gateway these requests back to FLRig after a little bit of massaging
