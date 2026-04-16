@@ -45,6 +45,8 @@ build:
     expire_in: 1 week
 
 # ── Stage: package ─────────────────────────────────────────────────────────
+# Runs only when a semver tag (v0.4.0, v1.2.3, …) is pushed.
+# Tag your release commit: git tag v0.4.0 && git push origin v0.4.0
 
 package:
   stage: package
@@ -63,30 +65,14 @@ package:
     - job: build
       artifacts: true
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-        - Cargo.toml
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
   before_script:
     - apt-get update -qq && apt-get install -y -qq git
   script:
-    - |
-      CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
-      if git show HEAD~1:Cargo.toml > /dev/null 2>&1; then
-        PREVIOUS=$(git show HEAD~1:Cargo.toml | grep '^version' | head -1 | sed 's/.*"\(.*\)"/\1/')
-      else
-        PREVIOUS=""
-      fi
-      echo "Version: ${CURRENT}  (was: ${PREVIOUS:-none})"
-      if [ "$CURRENT" = "$PREVIOUS" ]; then
-        echo "Version unchanged at ${CURRENT} — skipping .deb build"
-        exit 0
-      fi
-      echo "Version changed to ${CURRENT} — building .deb"
-      cargo install cargo-deb
-      cargo deb --no-build
+    - cargo install cargo-deb
+    - cargo deb --no-build
   artifacts:
-    name: "wlrigctl_${CI_COMMIT_SHORT_SHA}"
+    name: "wlrigctl_${CI_COMMIT_TAG}"
     paths:
       - target/debian/*.deb
     expire_in: 1 month
-    when: on_success
