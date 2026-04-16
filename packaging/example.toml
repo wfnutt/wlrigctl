@@ -73,27 +73,26 @@ port = 54321
 # ft8_frequencies = [1840000, 3575000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000]
 
 
-# Optional WebSocket server.  When this section is present, wlrigctl listens
-# for WebSocket (WSS) connections and pushes live rig state (frequency, mode,
-# power) as JSON text frames matching the WaveLogGate wire format.
+# WebSocket server — on by default, no configuration required.
 #
-# The default port is 54323 — exactly what Wavelog's cat.js expects
-# (wss://127.0.0.1:54323/).  Do not change the port unless you have also
-# modified Wavelog's JavaScript.
+# wlrigctl listens on wss://127.0.0.1:54323/ and pushes live rig state to
+# Wavelog's built-in WebSocket consumer (the same port WaveLogGate uses).
+# A self-signed TLS certificate is generated automatically on first startup
+# and saved to ~/.config/wlrigctl/ws-cert.pem so it persists across restarts.
 #
-# TLS is mandatory (Wavelog's cat.js always uses wss://).  By default a
-# self-signed certificate is generated at startup; the browser will show a
-# one-time security warning.  To suppress it permanently, use mkcert:
+# One-time browser setup (only needed once, not after every restart):
+#   Visit https://127.0.0.1:54323/ in the browser, click Advanced →
+#   "Proceed to 127.0.0.1 (unsafe)".  After that Wavelog connects silently.
 #
-#   mkcert -install
+# To avoid the browser warning entirely, use mkcert to install a trusted CA:
+#
+#   mkcert -install   # run once; installs CA into browser trust stores
 #   mkcert -cert-file ~/.config/wlrigctl/ws-cert.pem \
 #          -key-file  ~/.config/wlrigctl/ws-key.pem \
 #          127.0.0.1 localhost
+#   # then set tls_cert and tls_key below and restart wlrigctl
 #
-# Then uncomment tls_cert and tls_key below.
-#
-# Before Wavelog will connect, visit https://127.0.0.1:54323/ in your browser
-# and accept the certificate exception (or install the mkcert CA above).
+# Override any of the defaults by adding a [websocket] section:
 #
 # [websocket]
 # host = "127.0.0.1"

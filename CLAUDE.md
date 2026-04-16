@@ -102,9 +102,13 @@ WaveLogGate wire format.
 TLS is mandatory — Wavelog's `cat.js` hardcodes `wss://127.0.0.1:54323/`
 (WSS), and browsers refuse mixed-content `ws://` connections from HTTPS pages.
 If no `tls_cert`/`tls_key` are configured, a self-signed certificate is
-generated at startup using `rcgen`; the browser shows a one-time security
-warning which the user must accept by visiting `https://127.0.0.1:54323/`.
-Users who want a clean experience should use `mkcert` — see `example.toml`.
+generated using `rcgen` and **saved to `~/.config/wlrigctl/ws-cert.pem`** on
+first run; subsequent starts reload the same cert so the browser's one-time
+security exception remains valid.  Users who want no browser warning should use
+`mkcert` — see `example.toml`.
+
+The `[websocket]` config section is **optional**; the server always starts on
+`127.0.0.1:54323` with auto-generated TLS even when the section is absent.
 
 The `cat_url` field in `[wavelog]` is included in every live-radio POST to
 Wavelog's `/index.php/api/radio` endpoint.  When set, Wavelog auto-registers the

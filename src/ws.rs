@@ -6,9 +6,10 @@ use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use serde_derive::Deserialize;
 use serde_json::json;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, BufReader};
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
@@ -16,20 +17,25 @@ use tokio_rustls::TlsAcceptor;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
 
-#[derive(Debug, Deserialize, Clone)]
+/// Configuration for the WebSocket server.
+///
+/// The entire `[websocket]` section is optional in `config.toml`.  When absent,
+/// all fields take their defaults and the server starts automatically on
+/// `127.0.0.1:54323` using a persistent self-signed TLS certificate.
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct WsSettings {
     /// Interface to bind on.  Defaults to `127.0.0.1`.
     pub host: Option<String>,
-    /// TCP port to listen on.  Defaults to `54323` — the same port used by
-    /// WaveLogGate, which is what Wavelog's built-in WebSocket consumer expects.
+    /// TCP port to listen on.  Defaults to `54323` — the port Wavelog's
+    /// `cat.js` connects to (`wss://127.0.0.1:54323/`).
     pub port: Option<u16>,
-    /// Path to a PEM-encoded TLS certificate file.  Required together with
-    /// `tls_key`.  When absent a self-signed certificate is generated at
-    /// startup; the browser will show a security warning until you either
-    /// visit `https://127.0.0.1:<port>/` and accept the exception, or supply
-    /// a trusted certificate via `mkcert` (recommended).
+    /// Path to a PEM-encoded TLS certificate.  Must be set together with
+    /// `tls_key`.  When both are absent a self-signed certificate is
+    /// generated and saved in the wlrigctl config directory so it survives
+    /// restarts.  Use `mkcert` to generate a browser-trusted cert — see
+    /// `example.toml` for instructions.
     pub tls_cert: Option<String>,
-    /// Path to a PEM-encoded private key file (PKCS#8 or RSA).
+    /// Path to a PEM-encoded private key (PKCS#8 or RSA).
     pub tls_key: Option<String>,
 }
 
@@ -43,7 +49,9 @@ impl WsSettings {
     }
 }
 
-/// Build a [`TlsAcceptor`] from user-supplied PEM files.
+// ── TLS helpers ──────────────────────────────────────────────────────────────
+
+/// Build a [`TlsAcceptor`] from PEM files provided by the user.
 fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor> {
     let certs = {
         let f = File::open(cert_path)?;
@@ -57,20 +65,18 @@ fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor>
     let key = {
         let f = File::open(key_path)?;
         let mut r = BufReader::new(f);
-        // Try PKCS#8 first (produced by mkcert and openssl genrsa -pkcs8)
         let pkcs8 = pkcs8_private_keys(&mut r)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid key PEM"))?;
         if let Some(k) = pkcs8.into_iter().next() {
             PrivateKey(k)
         } else {
-            // Re-open and try RSA (PKCS#1 "BEGIN RSA PRIVATE KEY")
             let f2 = File::open(key_path)?;
             let rsa = rsa_private_keys(&mut BufReader::new(f2))
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid key PEM"))?;
             PrivateKey(
-                rsa.into_iter()
-                    .next()
-                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no private key found in file"))?,
+                rsa.into_iter().next().ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "no private key found in file")
+                })?,
             )
         }
     };
@@ -84,37 +90,74 @@ fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor>
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
-/// Generate an ephemeral self-signed certificate valid for `127.0.0.1` and
-/// `localhost`.  The cert is regenerated on every startup; the browser will
-/// show a one-time security warning that the user must accept.
-///
-/// To avoid the warning, generate a locally-trusted certificate with mkcert:
-///   `mkcert -install && mkcert 127.0.0.1 localhost`
-/// then set `tls_cert` and `tls_key` in `[websocket]` to the produced files.
-fn self_signed_tls_acceptor() -> io::Result<TlsAcceptor> {
-    let sans = vec!["127.0.0.1".to_string(), "localhost".to_string()];
-    let cert = generate_simple_self_signed(sans)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
-    let cert_der = cert
-        .serialize_der()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    let key_der = cert.serialize_private_key_der();
-
+/// Build a [`TlsAcceptor`] directly from DER-encoded cert and key bytes.
+fn tls_acceptor_from_der(cert_der: Vec<u8>, key_der: Vec<u8>) -> io::Result<TlsAcceptor> {
     let config = ServerConfig::builder()
         .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(vec![Certificate(cert_der)], PrivateKey(key_der))
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
-/// Broadcast radio state to a single connected WebSocket client.
+/// Return a [`TlsAcceptor`] backed by a self-signed certificate that is
+/// **saved to `config_dir`** so it persists across daemon restarts.
 ///
-/// Runs for the lifetime of one connection.  Subscribes to the shared broadcast
-/// channel and forwards each update as a JSON text frame.  Torn down cleanly
-/// on cancellation or client disconnect.
+/// On first run the cert is generated and written to
+/// `config_dir/ws-cert.pem` + `config_dir/ws-key.pem`.  On subsequent
+/// runs the saved files are loaded.  If the saved files are corrupt they
+/// are regenerated.
+///
+/// Because the certificate is stable across restarts, the browser only
+/// needs to accept the one-time security exception once.  Users who want
+/// to avoid the exception entirely should use `mkcert` (see `example.toml`).
+fn persistent_self_signed_acceptor(config_dir: &Path) -> io::Result<TlsAcceptor> {
+    let cert_path = config_dir.join("ws-cert.pem");
+    let key_path  = config_dir.join("ws-key.pem");
+
+    if cert_path.exists() && key_path.exists() {
+        let cert_str = cert_path.to_str().unwrap_or("");
+        let key_str  = key_path.to_str().unwrap_or("");
+        match load_tls_acceptor(cert_str, key_str) {
+            Ok(a) => {
+                info!("WebSocket TLS: loaded saved certificate from {}", cert_path.display());
+                return Ok(a);
+            }
+            Err(e) => warn!("WebSocket TLS: saved cert/key invalid ({e}), regenerating"),
+        }
+    }
+
+    let sans = vec!["127.0.0.1".to_string(), "localhost".to_string()];
+    let cert = generate_simple_self_signed(sans)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    let cert_der = cert.serialize_der()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let key_der  = cert.serialize_private_key_der();
+    let cert_pem = cert.serialize_pem()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let key_pem  = cert.serialize_private_key_pem();
+
+    fs::create_dir_all(config_dir)?;
+    fs::write(&cert_path, cert_pem)?;
+    fs::write(&key_path,  key_pem)?;
+    info!(
+        "WebSocket TLS: generated self-signed certificate, saved to {}",
+        cert_path.display()
+    );
+    warn!(
+        "WebSocket TLS: browser will show a security warning. \
+         Visit https://{} in your browser and accept the certificate \
+         exception once. It will not be asked again unless you delete {}.",
+        "127.0.0.1:54323",
+        cert_path.display()
+    );
+
+    tls_acceptor_from_der(cert_der, key_der)
+}
+
+// ── Per-client handler ────────────────────────────────────────────────────────
+
 async fn handle_client(
     stream: TcpStream,
     peer: SocketAddr,
@@ -125,8 +168,6 @@ async fn handle_client(
     let tls_stream = match acceptor.accept(stream).await {
         Ok(s) => s,
         Err(e) => {
-            // A TLS handshake failure often means the browser visited the URL in
-            // plain HTTP first; once the user accepts the cert exception it works.
             warn!("TLS handshake failed for {peer}: {e}");
             return;
         }
@@ -155,7 +196,7 @@ async fn handle_client(
                         debug!("WebSocket client {peer} disconnected");
                         break;
                     }
-                    Some(Ok(_)) => {} // ignore ping/pong/text from client
+                    Some(Ok(_)) => {}
                 }
             }
             update = rx.recv() => {
@@ -189,21 +230,16 @@ async fn handle_client(
     info!("WebSocket client disconnected: {peer}");
 }
 
-/// Spawn a WSS (TLS WebSocket) server that pushes live radio state to browser clients.
+// ── Public entry point ────────────────────────────────────────────────────────
+
+/// Spawn the WSS server.
 ///
-/// Each connecting client receives a JSON text frame on every rig-state change:
-/// ```json
-/// {"type":"radio_status","frequency":14074000,"mode":"USB","power":10.0,"radio":"IC-703","timestamp":1714000000000}
-/// ```
-/// The default port is 54323, matching WaveLogGate's WSS port so that Wavelog's
-/// built-in WebSocket consumer works without modification.
-///
-/// TLS is mandatory because browsers refuse `ws://` connections from pages
-/// served over HTTPS (mixed-content policy) and Wavelog's cat.js hardcodes
-/// `wss://127.0.0.1:54323/`.  If no cert/key are configured, a self-signed
-/// certificate is generated at startup.
+/// `config_dir` is the application's XDG config directory
+/// (`~/.config/wlrigctl`).  The auto-generated self-signed certificate is
+/// stored there so it persists across restarts.
 pub fn ws_thread(
     settings: WsSettings,
+    config_dir: PathBuf,
     ws_tx: broadcast::Sender<Arc<RadioData>>,
     token: CancellationToken,
 ) {
@@ -213,21 +249,19 @@ pub fn ws_thread(
         (Some(cert), Some(key)) => {
             match load_tls_acceptor(cert, key) {
                 Ok(a) => { info!("WebSocket TLS: loaded cert from {cert}"); a }
-                Err(e) => { warn!("WebSocket TLS: failed to load cert/key: {e}; WebSocket server disabled"); return; }
+                Err(e) => {
+                    warn!("WebSocket TLS: failed to load cert/key: {e}; WebSocket server disabled");
+                    return;
+                }
             }
         }
         (None, None) => {
-            match self_signed_tls_acceptor() {
-                Ok(a) => {
-                    warn!(
-                        "WebSocket TLS: using a self-signed certificate. \
-                         The browser will show a security warning. \
-                         Visit https://{addr}/ in the browser and accept the exception, \
-                         or use mkcert to generate a trusted cert (see example.toml)."
-                    );
-                    a
+            match persistent_self_signed_acceptor(&config_dir) {
+                Ok(a) => a,
+                Err(e) => {
+                    warn!("WebSocket TLS: cert setup failed: {e}; WebSocket server disabled");
+                    return;
                 }
-                Err(e) => { warn!("WebSocket TLS: failed to generate self-signed cert: {e}; WebSocket server disabled"); return; }
             }
         }
         _ => {
@@ -274,13 +308,15 @@ pub fn ws_thread(
     });
 }
 
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn bind_addr_defaults() {
-        let s = WsSettings { host: None, port: None, tls_cert: None, tls_key: None };
+    fn default_settings_give_expected_addr() {
+        let s = WsSettings::default();
         let addr = s.bind_addr();
         assert_eq!(addr.ip().to_string(), "127.0.0.1");
         assert_eq!(addr.port(), 54323);
@@ -300,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn bind_addr_invalid_falls_back_to_loopback() {
+    fn bind_addr_invalid_host_falls_back_to_loopback() {
         let s = WsSettings {
             host: Some("not-an-ip".to_string()),
             port: Some(54323),
@@ -313,13 +349,37 @@ mod tests {
     }
 
     #[test]
-    fn self_signed_acceptor_builds_without_error() {
-        // Exercises the rcgen + rustls path; if it compiles and produces an acceptor
-        // the cert-generation chain is working.
-        assert!(self_signed_tls_acceptor().is_ok());
+    fn cert_is_saved_and_reloaded_from_disk() {
+        let dir = std::env::temp_dir().join("wlrigctl-ws-test");
+        // Clean up any previous run so we exercise the generate path.
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // First call: should generate and save.
+        let a1 = persistent_self_signed_acceptor(&dir);
+        assert!(a1.is_ok(), "cert generation failed: {:?}", a1.err());
+        assert!(dir.join("ws-cert.pem").exists());
+        assert!(dir.join("ws-key.pem").exists());
+
+        // Second call: should load from disk (same cert, no regeneration).
+        let a2 = persistent_self_signed_acceptor(&dir);
+        assert!(a2.is_ok(), "cert reload failed: {:?}", a2.err());
     }
 
-    /// Verify the JSON message shape matches what Wavelog expects.
+    #[test]
+    fn corrupt_saved_cert_triggers_regeneration() {
+        let dir = std::env::temp_dir().join("wlrigctl-ws-test-corrupt");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Write garbage files.
+        std::fs::write(dir.join("ws-cert.pem"), b"not a cert").unwrap();
+        std::fs::write(dir.join("ws-key.pem"),  b"not a key").unwrap();
+
+        // Should regenerate rather than fail.
+        let result = persistent_self_signed_acceptor(&dir);
+        assert!(result.is_ok(), "regeneration after corrupt files failed: {:?}", result.err());
+    }
+
     #[test]
     fn radio_status_message_shape() {
         let data = RadioData {
@@ -345,12 +405,11 @@ mod tests {
         assert_eq!(msg["radio"],     "IC-703");
     }
 
-    /// Non-numeric frequency/power strings must yield 0 rather than panic.
     #[test]
     fn radio_status_bad_numeric_fields_produce_zero() {
-        let freq: u64 = "not-a-number".parse().unwrap_or(0);
+        let freq:  u64 = "not-a-number".parse().unwrap_or(0);
         let power: f32 = "??".parse().unwrap_or(0.0);
-        assert_eq!(freq, 0);
+        assert_eq!(freq,  0);
         assert_eq!(power, 0.0);
     }
 }

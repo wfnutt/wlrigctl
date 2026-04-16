@@ -62,10 +62,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Separate thread for someone logging from WSJTX via UDP on port 2237
     wsjtx_thread(settings.wsjtx, settings.wavelog, token.clone());
 
-    // Optional WebSocket server: push live rig state to browser clients
-    if let Some(ws_settings) = settings.websocket {
-        ws_thread(ws_settings, ws_tx.clone(), token.clone());
-    }
+    // WebSocket server: push live rig state to browser clients.
+    // Always started; [websocket] section in config.toml is optional.
+    let config_dir = Settings::config_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    ws_thread(settings.websocket, config_dir, ws_tx.clone(), token.clone());
 
     // Keep the current thread for CAT control requests from Wavelog
     // We gateway these requests back to FLRig after a little bit of massaging
