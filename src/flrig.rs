@@ -235,11 +235,6 @@ impl FLRig {
         }
     }
 
-    pub async fn get_vfo(&self) -> Result<String, ClientError> {
-        let response: String = self.client.call("rig.get_vfo", ()).await?;
-        Ok(response)
-    }
-
     pub async fn get_mode(&self) -> Result<String, ClientError> {
         let response: String = self.client.call("rig.get_mode", ()).await?;
         Ok(response)
@@ -389,7 +384,7 @@ mod tests {
     async fn flrig_bad_url_returns_error() {
         // Port 19999 has nothing listening; the connection should be refused.
         let rig = FLRig::new(test_settings(), "IC-703".to_string());
-        assert!(rig.get_vfo().await.is_err());
+        assert!(rig.get_mode().await.is_err());
     }
 
     #[test]
