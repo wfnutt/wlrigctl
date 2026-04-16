@@ -111,7 +111,7 @@ fn tls_acceptor_from_der(cert_der: Vec<u8>, key_der: Vec<u8>) -> io::Result<TlsA
 /// Because the certificate is stable across restarts, the browser only
 /// needs to accept the one-time security exception once.  Users who want
 /// to avoid the exception entirely should use `mkcert` (see `example.toml`).
-fn persistent_self_signed_acceptor(config_dir: &Path) -> io::Result<TlsAcceptor> {
+fn persistent_self_signed_acceptor(config_dir: &Path, addr: SocketAddr) -> io::Result<TlsAcceptor> {
     let cert_path = config_dir.join("ws-cert.pem");
     let key_path  = config_dir.join("ws-key.pem");
 
@@ -145,11 +145,18 @@ fn persistent_self_signed_acceptor(config_dir: &Path) -> io::Result<TlsAcceptor>
         "WebSocket TLS: generated self-signed certificate, saved to {}",
         cert_path.display()
     );
-    warn!(
-        "WebSocket TLS: browser will show a security warning. \
-         Visit https://{} in your browser and accept the certificate \
-         exception once. It will not be asked again unless you delete {}.",
-        "127.0.0.1:54323",
+    // eprintln! bypasses the logging system so this is always visible,
+    // even when RUST_LOG is unset (the normal case for a systemd service).
+    eprintln!(
+        "\nwlrigctl: WebSocket TLS certificate generated for the first time.\n\
+         \n\
+         To allow Wavelog to connect, open this URL in your browser ONCE\n\
+         and click  Advanced → Proceed:\n\
+         \n\
+             https://{addr}/\n\
+         \n\
+         You will not be asked again (certificate is saved to\n\
+         {}).\n",
         cert_path.display()
     );
 
@@ -256,7 +263,7 @@ pub fn ws_thread(
             }
         }
         (None, None) => {
-            match persistent_self_signed_acceptor(&config_dir) {
+            match persistent_self_signed_acceptor(&config_dir, addr) {
                 Ok(a) => a,
                 Err(e) => {
                     warn!("WebSocket TLS: cert setup failed: {e}; WebSocket server disabled");
@@ -348,6 +355,10 @@ mod tests {
         assert_eq!(addr.port(), 54323);
     }
 
+    fn test_addr() -> SocketAddr {
+        "127.0.0.1:54323".parse().unwrap()
+    }
+
     #[test]
     fn cert_is_saved_and_reloaded_from_disk() {
         let dir = std::env::temp_dir().join("wlrigctl-ws-test");
@@ -355,13 +366,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
 
         // First call: should generate and save.
-        let a1 = persistent_self_signed_acceptor(&dir);
+        let a1 = persistent_self_signed_acceptor(&dir, test_addr());
         assert!(a1.is_ok(), "cert generation failed: {:?}", a1.err());
         assert!(dir.join("ws-cert.pem").exists());
         assert!(dir.join("ws-key.pem").exists());
 
         // Second call: should load from disk (same cert, no regeneration).
-        let a2 = persistent_self_signed_acceptor(&dir);
+        let a2 = persistent_self_signed_acceptor(&dir, test_addr());
         assert!(a2.is_ok(), "cert reload failed: {:?}", a2.err());
     }
 
@@ -376,7 +387,7 @@ mod tests {
         std::fs::write(dir.join("ws-key.pem"),  b"not a key").unwrap();
 
         // Should regenerate rather than fail.
-        let result = persistent_self_signed_acceptor(&dir);
+        let result = persistent_self_signed_acceptor(&dir, test_addr());
         assert!(result.is_ok(), "regeneration after corrupt files failed: {:?}", result.err());
     }
 
