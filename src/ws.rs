@@ -85,7 +85,7 @@ fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor>
         .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(certs, key)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
 
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
@@ -96,7 +96,7 @@ fn tls_acceptor_from_der(cert_der: Vec<u8>, key_der: Vec<u8>) -> io::Result<TlsA
         .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(vec![Certificate(cert_der)], PrivateKey(key_der))
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
@@ -129,13 +129,13 @@ fn persistent_self_signed_acceptor(config_dir: &Path) -> io::Result<TlsAcceptor>
 
     let sans = vec!["127.0.0.1".to_string(), "localhost".to_string()];
     let cert = generate_simple_self_signed(sans)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
 
     let cert_der = cert.serialize_der()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
     let key_der  = cert.serialize_private_key_der();
     let cert_pem = cert.serialize_pem()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
     let key_pem  = cert.serialize_private_key_pem();
 
     fs::create_dir_all(config_dir)?;

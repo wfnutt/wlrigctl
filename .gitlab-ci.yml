@@ -1,0 +1,92 @@
+stages:
+  - test
+  - build
+  - package
+
+variables:
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+  GIT_DEPTH: "2"
+
+.cargo-cache:
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/registry/
+      - .cargo/git/
+      - .cargo/bin/
+      - target/
+
+# ── Stage: test ────────────────────────────────────────────────────────────
+
+test:
+  stage: test
+  image: rust:1-bookworm
+  extends: .cargo-cache
+  script:
+    - cargo clippy -- -D warnings
+    - cargo test
+
+# ── Stage: build ───────────────────────────────────────────────────────────
+
+build:
+  stage: build
+  image: rust:1-bookworm
+  extends: .cargo-cache
+  needs:
+    - test
+  script:
+    - cargo build --release
+  artifacts:
+    name: "wlrigctl-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - target/release/wlrigctl
+    expire_in: 1 week
+
+# ── Stage: package ─────────────────────────────────────────────────────────
+
+package:
+  stage: package
+  image: rust:1-bookworm
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/registry/
+      - .cargo/git/
+      - .cargo/bin/
+      - target/
+    policy: pull
+  needs:
+    - job: build
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - Cargo.toml
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git
+  script:
+    - |
+      CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+      if git show HEAD~1:Cargo.toml > /dev/null 2>&1; then
+        PREVIOUS=$(git show HEAD~1:Cargo.toml | grep '^version' | head -1 | sed 's/.*"\(.*\)"/\1/')
+      else
+        PREVIOUS=""
+      fi
+      echo "Version: ${CURRENT}  (was: ${PREVIOUS:-none})"
+      if [ "$CURRENT" = "$PREVIOUS" ]; then
+        echo "Version unchanged at ${CURRENT} — skipping .deb build"
+        exit 0
+      fi
+      echo "Version changed to ${CURRENT} — building .deb"
+      cargo install cargo-deb
+      cargo deb --no-build
+  artifacts:
+    name: "wlrigctl_${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - target/debian/*.deb
+    expire_in: 1 month
+    when: on_success

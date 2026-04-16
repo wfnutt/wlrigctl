@@ -134,7 +134,7 @@ fn http_err_str(status: StatusCode, msg: impl Into<String>) -> HttpResponse {
 }
 
 // Parse '/14030000/cw' into a typed struct: Qsy
-fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, HttpResponse> {
+fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, Box<HttpResponse>> {
     let parts: Vec<&str> = req
         .uri()
         .path()
@@ -143,22 +143,22 @@ fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, HttpResponse> {
         .collect();
 
     if parts.len() != 2 {
-        return Err(http_err_str(
+        return Err(Box::new(http_err_str(
             StatusCode::BAD_REQUEST,
             "Expected /<freq>/<mode>",
-        ));
+        )));
     }
 
     let freq: u32 = parts[0].parse::<u32>().map_err(|_| {
-        http_err_str(
+        Box::new(http_err_str(
             StatusCode::BAD_REQUEST,
             "Frequency must be a positive integer",
-        )
+        ))
     })?;
 
     let mode = parts[1]
         .parse::<WavelogMode>()
-        .map_err(|_| http_err_str(StatusCode::BAD_REQUEST, "Invalid mode"))?;
+        .map_err(|_| Box::new(http_err_str(StatusCode::BAD_REQUEST, "Invalid mode")))?;
     Ok(Qsy {
         freq: freq as f64,
         mode,
@@ -198,7 +198,7 @@ async fn qsy(
     info!("qsy() called with: {}", &req.uri().path());
 
     let qsyinfo = match parse_qsy_path(&req) {
-        Err(e) => return Ok(e), // Infallible
+        Err(e) => return Ok(*e), // Infallible
         Ok(q) => q,
     };
 
