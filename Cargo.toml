@@ -38,6 +38,14 @@ tokio-rustls = "0.24"
 [profile.release]
 strip = "symbols"
 
+[package.metadata.release]
+# cargo-release configuration.  Use `cargo release <version>` to cut a
+# release; it bumps Cargo.toml, commits, tags, and pushes in one step.
+# publish = false prevents accidental uploads to crates.io.
+publish = false
+# tag-name default is already "v{{version}}"; stated explicitly for clarity.
+tag-name = "v{{version}}"
+
 [package.metadata.deb]
 maintainer = "wfnutt <33999718+wfnutt@users.noreply.github.com>"
 depends = "systemd"

@@ -33,6 +33,20 @@ cargo deb                      # produces target/debian/wlrigctl_*.deb
 The .deb installs the binary, a systemd user service, and an example config.
 Targets x86_64 and aarch64 (cross-compilation works).
 
+## Cutting a release
+
+Use `cargo-release` (`cargo install cargo-release`).  It bumps the version
+in `Cargo.toml`, commits, creates the `vX.Y.Z` tag, and pushes — keeping the
+tag and `Cargo.toml` in sync automatically.
+
+```sh
+cargo release 0.5.0
+```
+
+GitHub Actions picks up the tag, runs the full test suite, and attaches the
+`.deb` to a GitHub Release.  Do not tag manually; the CI pipeline validates
+that the tag version matches `Cargo.toml` and will fail if they diverge.
+
 ## Known quirks and non-obvious design decisions
 
 ### Wavelog drops the TCP connection before the response arrives (cat.rs)
