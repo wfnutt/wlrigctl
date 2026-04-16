@@ -257,14 +257,15 @@ impl FLRig {
     }
 
     pub async fn set_mode(&self, mode: Mode) -> Result<(), FlrigError> {
-        // rather than glitch the radio, if the required mode is already in effect, leave it alone!
+        // Rather than glitch the radio, if the required mode is already in effect, leave it alone.
         // This matters because if we're already in a mode with a reduced bandwidth or filter,
-        // the rig is nice and quiet. If we perturb the mode, flrig will set a wider bandwidth
+        // the rig is nice and quiet. If we perturb the mode, FLRig will set a wider bandwidth
         // on IC-703, then a split-second later we apply our cwbandwidth option to put the filter
         // back in place. This causes a noticeable audio disturbance which is distracting.
         //
-        // Maybe we could lose the cwbandwidth feature entirely, and just use this hysteresis
-        // to not mess with a mode that was already correct?
+        // Tested on IC-703: cwbandwidth is still required. Hysteresis alone is not sufficient —
+        // when switching away from CW and back again via the Wavelog bandlist, the narrow filter
+        // is not restored without the follow-up rig.set_bw call.
         let existing_mode_str: String = self.get_mode().await?;
 
         // Since we're converting the mode returned from FLRig's get_mode(), we have to handle the

@@ -41,8 +41,9 @@ When changing to CW mode on an IC-703, FLRig briefly applies a wide default
 bandwidth before the mode change fully settles. The `cwbandwidth` config option
 triggers a follow-up `rig.set_bw` call to restore the narrow filter. This causes
 a brief audio glitch. The hysteresis in `set_mode` (no-op if already in the
-target mode) minimises how often this happens. The comment in `set_mode` notes
-that this bodge might be removable entirely if the hysteresis is good enough.
+target mode) minimises how often this happens. The `cwbandwidth` follow-up call
+is confirmed necessary: without it, switching away from CW and back via the
+Wavelog bandlist does not restore the narrow filter.
 
 ### Yaesu FTDX10 mode naming (flrig.rs `Mode` enum, cat.rs)
 FLRig mirrors whatever mode names the physical radio displays rather than
@@ -101,10 +102,6 @@ response.
   change). This handles all major ICOM / Yaesu / Kenwood / Elecraft rigs
   without any per-brand config.
 
-- **Remove `cwbandwidth` if hysteresis is sufficient**: The comment in
-  `flrig.rs set_mode` notes this might be removable. Worth testing on the
-  IC-703 with `cwbandwidth` unset to see if the audio glitch is acceptable
-  now that hysteresis prevents redundant mode changes.
 
 ## Dependency notes
 
