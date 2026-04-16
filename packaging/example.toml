@@ -39,10 +39,24 @@ cwbandwidth = 1
 host = "127.0.0.1"
 port = 54321
 
-# boolean flag to select use of Yaesu explicit -U or -L modes when mapping from
-# wavelog to flrig.
-# e.g. "CW-U" instead of "CW"
-yaesu = false
+# FLRig mode strings for this rig.  All three default to ICOM/generic names
+# (CW, RTTY, D-USB) if absent, so IC-703 users need not set anything here.
+#
+# Uncomment and adjust for your rig:
+#
+#   Yaesu FTDX10 / FT-991A etc.:
+# cw_mode      = "CW-U"
+# rtty_mode    = "RTTY-U"
+# digital_mode = "DATA-U"
+#
+#   Kenwood (RTTY reported as FSK):
+# rtty_mode    = "FSK"
+#
+#   Newer ICOM (IC-7300, IC-7610 etc.):
+# digital_mode = "USB-D"
+#
+#   Elecraft (generic DATA mode):
+# digital_mode = "DATA"
 
 # FT8 dial frequencies in Hz. When present this list replaces the built-in
 # defaults so you can update the band plan without recompiling.

@@ -45,12 +45,15 @@ target mode) minimises how often this happens. The `cwbandwidth` follow-up call
 is confirmed necessary: without it, switching away from CW and back via the
 Wavelog bandlist does not restore the narrow filter.
 
-### Yaesu FTDX10 mode naming (flrig.rs `Mode` enum, cat.rs)
+### Per-rig mode naming (`flrig.rs` `Mode` enum, `cat.rs` `CatSettings`)
 FLRig mirrors whatever mode names the physical radio displays rather than
-providing a brand-agnostic interface. On a Yaesu FTDX10 there is no plain "CW"
-mode — you must explicitly choose "CW-U" or "CW-L". Set `yaesu = true` in the
-`[CAT]` config section to switch the mode-mapping functions to Yaesu variants.
-The `Mode` enum carries both IC-703-style and Yaesu-style variants side by side.
+providing a brand-agnostic interface.  The optional `cw_mode`, `rtty_mode` and
+`digital_mode` fields in `[CAT]` specify the exact FLRig mode strings to use for
+each concept.  All three default to ICOM/generic names (`CW`, `RTTY`, `D-USB`)
+when absent.  Examples: Yaesu needs `CW-U`/`RTTY-U`/`DATA-U`; newer ICOM rigs
+(IC-7300) need `USB-D`; Kenwood may need `FSK`; Elecraft uses `DATA`.  The
+`Mode` enum in `flrig.rs` covers all known variants; add new ones there if a
+future rig introduces an unfamiliar string.
 
 ### FT8 frequency detection is heuristic (cat.rs `is_ft8`)
 When Wavelog sends a CAT QSY request, the mode hint from the bandmap is
@@ -84,23 +87,6 @@ CORS headers (`Access-Control-Allow-*`). Without them the browser blocks the
 response.
 
 ## Remaining TODO items
-
-- **Replace `yaesu` bool with `rig.get_modes()` auto-detection** (`cat.rs`,
-  `flrig.rs`): The `yaesu = true` config flag is a brand-specific kludge.
-  FLRig exports different mode strings per rig (e.g. Yaesu uses "CW-U"/"CW-L"
-  and "RTTY-U"/"RTTY-L" where ICOM/Kenwood/Elecraft use "CW" and "RTTY";
-  Kenwood calls RTTY "FSK"; Elecraft uses a single "DATA" for all digital;
-  IC-703 uses "D-USB" where newer ICOMs use "USB-D"). At `CAT_thread` startup,
-  call `rig.get_modes()` and build a `ModeMap` by picking the first available
-  match from an ordered preference list for each concept:
-  - CW:      `["CW", "CW-U"]`
-  - RTTY:    `["RTTY", "FSK", "RTTY-U"]`
-  - Digital: `["D-USB", "USB-D", "DATA-U", "DATA"]`
-  Replace the two `wavelog_to_*_flrig_mode` functions with one that takes a
-  `&ModeMap`. Remove `yaesu: bool` from `CatSettings` (the config crate
-  silently ignores the now-orphaned TOML key, so existing configs need no
-  change). This handles all major ICOM / Yaesu / Kenwood / Elecraft rigs
-  without any per-brand config.
 
 
 ## Dependency notes
