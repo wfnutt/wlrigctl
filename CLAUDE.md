@@ -70,10 +70,12 @@ Only schema version 2 is handled. Magic number: `0xadbccbda`. Only
 and discarded. If WSJT-X changes its schema number, `decode_hdr` will return
 `UnsupportedSchema` for every packet.
 
-### Config section names are case-insensitive
-The `config` crate lower-cases all keys before deserialisation, so `[CAT]` and
-`[cat]` in the TOML file both map to the `cat` field in `Settings`. The example
-config still uses `[CAT]` / `[WSJTX]` for readability.
+### Config section names must match exactly (`[CAT]` and `[WSJTX]`)
+The `config` crate v0.13 does **not** lowercase keys. The `Settings` struct uses
+`#[serde(rename = "CAT")]` and `#[serde(rename = "WSJTX")]` so that the TOML
+section names `[CAT]` and `[WSJTX]` map to the snake_case Rust fields `cat` and
+`wsjtx`. Config files must use the uppercase names; lowercase `[cat]`/`[wsjtx]`
+will not deserialise.
 
 ### CORS headers on CAT responses
 Wavelog's bandmap makes HTTP requests from browser JavaScript, which requires
@@ -81,14 +83,6 @@ CORS headers (`Access-Control-Allow-*`). Without them the browser blocks the
 response.
 
 ## Remaining TODO items
-
-- **Fix bugs introduced by over-confident Claude**: the config.toml now needs to
-  have [cat] and [wsjtx] to work. That is a breaking change for existing users,
-  which is unacceptable. The original capitalisation was superior because it
-  matches the representations used: CAT and WSJTX.
-
-  Another issue that I *think* has been introduced is that when an IC-703 is in
-  D-USB mode, that mode cannot be properly recognised by Wavelog Release 2.3.
 
 - **Replace `yaesu` bool with `rig.get_modes()` auto-detection** (`cat.rs`,
   `flrig.rs`): The `yaesu = true` config flag is a brand-specific kludge.

@@ -13,7 +13,9 @@ use crate::wsjtx::WsjtxSettings;
 pub struct Settings {
     pub wavelog: WavelogSettings,
     pub flrig: FlrigSettings,
+    #[serde(rename = "CAT")]
     pub cat: CatSettings,
+    #[serde(rename = "WSJTX")]
     pub wsjtx: WsjtxSettings,
 }
 
