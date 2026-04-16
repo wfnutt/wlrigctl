@@ -298,6 +298,7 @@ impl FLRig {
             frequency: vfo,
             mode,
             power: rig_power_watts(power_u, maxpwr_u, self.maxpower),
+            cat_url: None,
         }))
     }
 

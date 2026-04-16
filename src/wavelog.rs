@@ -17,15 +17,23 @@ pub struct WavelogSettings {
     pub identifier: String,
     pub station_profile_id: u32,
     pub interval: u64,
+    /// URL of this daemon's CAT HTTP server.  When set, it is included in every
+    /// live-radio POST so Wavelog can auto-register the CAT callback and show a
+    /// "QSY" button in the bandmap without any manual configuration.
+    pub cat_url: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct RadioData {
     pub key: String,
     pub radio: String,
     pub frequency: String,
     pub mode: String,
     pub power: String,
+    /// Omitted from JSON when absent so existing Wavelog installs that don't
+    /// know about the field are not confused.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cat_url: Option<String>,
 }
 
 async fn upload_live_radio_data(
@@ -70,6 +78,7 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>, to
         frequency: String::from(""),
         mode: String::from(""),
         power: String::from("0"),
+        cat_url: settings.cat_url.clone(),
     };
 
     tokio::task::spawn(async move {
