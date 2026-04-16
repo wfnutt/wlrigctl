@@ -120,6 +120,26 @@ impl fmt::Display for Mode {
     }
 }
 
+impl Mode {
+    /// Map a rig-specific FLRig mode to the mode string Wavelog expects.
+    ///
+    /// Wavelog accepts ADIF-standard mode names (USB, LSB, CW, RTTY, FM, AM).
+    /// FLRig mirrors whatever the rig's panel displays — e.g. an IC-703 uses
+    /// "D-USB" for digital USB, a Yaesu FTDX10 uses "DATA-U". Both mean the
+    /// operator is on a USB carrier in data mode, so both map to "USB" here.
+    pub fn to_wavelog_mode(self) -> &'static str {
+        match self {
+            Mode::LSB | Mode::D_LSB | Mode::DATA_L => "LSB",
+            Mode::USB | Mode::D_USB | Mode::DATA_U  => "USB",
+            Mode::AM  | Mode::AM_N                  => "AM",
+            Mode::CW  | Mode::CW_U | Mode::CW_R | Mode::CW_L => "CW",
+            Mode::RTTY | Mode::RTTY_U | Mode::RTTY_R | Mode::RTTY_L => "RTTY",
+            Mode::FM | Mode::FM_N | Mode::DATA_FM | Mode::DATA_FMN  => "FM",
+            Mode::PSK => "USB",
+        }
+    }
+}
+
 impl FromStr for Mode {
     type Err = ();
 
@@ -203,13 +223,21 @@ impl FLRig {
         let mode_r   = results.pop().expect("multicall result count mismatch");
         let vfo_r    = results.pop().expect("multicall result count mismatch");
 
-        let vfo    = String::try_from_value(&vfo_r.map_err(ClientError::from)?)?;
-        let mode   = String::try_from_value(&mode_r.map_err(ClientError::from)?)?;
-        let maxpwr = i32::try_from_value(&maxpwr_r.map_err(ClientError::from)?)?;
-        let power  = i32::try_from_value(&power_r.map_err(ClientError::from)?)?;
+        let vfo      = String::try_from_value(&vfo_r.map_err(ClientError::from)?)?;
+        let mode_raw = String::try_from_value(&mode_r.map_err(ClientError::from)?)?;
+        let maxpwr   = i32::try_from_value(&maxpwr_r.map_err(ClientError::from)?)?;
+        let power    = i32::try_from_value(&power_r.map_err(ClientError::from)?)?;
 
         let maxpwr_u = if maxpwr < 0 { 0u32 } else { maxpwr as u32 };
         let power_u  = if power  < 0 { 0u32 } else { power  as u32 };
+
+        // Translate the rig-specific FLRig mode string to one Wavelog understands.
+        // If the string isn't in our Mode enum (e.g. a new rig adds an unknown mode),
+        // pass it through unchanged rather than dropping or erroring.
+        let mode = match mode_raw.parse::<Mode>() {
+            Ok(m)  => m.to_wavelog_mode().to_string(),
+            Err(_) => { debug!("Unknown FLRig mode '{mode_raw}', forwarding as-is"); mode_raw }
+        };
 
         debug!("freq:{vfo} mode:{mode} power:{power} max:{maxpwr}");
 
@@ -309,6 +337,49 @@ mod tests {
         // Port 19999 has nothing listening; the connection should be refused.
         let rig = FLRig::new(test_settings(), "IC-703".to_string());
         assert!(rig.get_vfo().await.is_err());
+    }
+
+    #[test]
+    fn wavelog_mode_standard_passthrough() {
+        // Standard modes should come through unchanged.
+        assert_eq!(Mode::LSB.to_wavelog_mode(),  "LSB");
+        assert_eq!(Mode::USB.to_wavelog_mode(),  "USB");
+        assert_eq!(Mode::CW.to_wavelog_mode(),   "CW");
+        assert_eq!(Mode::RTTY.to_wavelog_mode(), "RTTY");
+        assert_eq!(Mode::FM.to_wavelog_mode(),   "FM");
+        assert_eq!(Mode::AM.to_wavelog_mode(),   "AM");
+    }
+
+    #[test]
+    fn wavelog_mode_icom_digital() {
+        // IC-703 D-USB / D-LSB → standard carrier modes.
+        assert_eq!(Mode::D_USB.to_wavelog_mode(), "USB");
+        assert_eq!(Mode::D_LSB.to_wavelog_mode(), "LSB");
+    }
+
+    #[test]
+    fn wavelog_mode_yaesu_variants() {
+        // Yaesu CW/RTTY/DATA variants → standard equivalents.
+        assert_eq!(Mode::CW_U.to_wavelog_mode(),   "CW");
+        assert_eq!(Mode::CW_L.to_wavelog_mode(),   "CW");
+        assert_eq!(Mode::CW_R.to_wavelog_mode(),   "CW");
+        assert_eq!(Mode::RTTY_U.to_wavelog_mode(), "RTTY");
+        assert_eq!(Mode::RTTY_L.to_wavelog_mode(), "RTTY");
+        assert_eq!(Mode::RTTY_R.to_wavelog_mode(), "RTTY");
+        assert_eq!(Mode::DATA_U.to_wavelog_mode(), "USB");
+        assert_eq!(Mode::DATA_L.to_wavelog_mode(), "LSB");
+    }
+
+    #[test]
+    fn wavelog_mode_fm_variants() {
+        assert_eq!(Mode::FM_N.to_wavelog_mode(),    "FM");
+        assert_eq!(Mode::DATA_FM.to_wavelog_mode(), "FM");
+        assert_eq!(Mode::DATA_FMN.to_wavelog_mode(),"FM");
+    }
+
+    #[test]
+    fn wavelog_mode_am_narrow() {
+        assert_eq!(Mode::AM_N.to_wavelog_mode(), "AM");
     }
 
     #[test]
