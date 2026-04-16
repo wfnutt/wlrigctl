@@ -74,17 +74,32 @@ port = 54321
 
 
 # Optional WebSocket server.  When this section is present, wlrigctl listens
-# for WebSocket connections and pushes live rig state (frequency, mode, power)
-# as JSON text frames.  Wavelog's built-in WebSocket consumer (normally served
-# by WaveLogGate) can connect here instead.
+# for WebSocket (WSS) connections and pushes live rig state (frequency, mode,
+# power) as JSON text frames matching the WaveLogGate wire format.
 #
-# The default bind address is 127.0.0.1:54322.  Only change the host if you
-# need the server reachable from another machine; for local browser access the
-# default is correct and safest.
+# The default port is 54323 — exactly what Wavelog's cat.js expects
+# (wss://127.0.0.1:54323/).  Do not change the port unless you have also
+# modified Wavelog's JavaScript.
+#
+# TLS is mandatory (Wavelog's cat.js always uses wss://).  By default a
+# self-signed certificate is generated at startup; the browser will show a
+# one-time security warning.  To suppress it permanently, use mkcert:
+#
+#   mkcert -install
+#   mkcert -cert-file ~/.config/wlrigctl/ws-cert.pem \
+#          -key-file  ~/.config/wlrigctl/ws-key.pem \
+#          127.0.0.1 localhost
+#
+# Then uncomment tls_cert and tls_key below.
+#
+# Before Wavelog will connect, visit https://127.0.0.1:54323/ in your browser
+# and accept the certificate exception (or install the mkcert CA above).
 #
 # [websocket]
 # host = "127.0.0.1"
-# port = 54322
+# port = 54323
+# tls_cert = "/home/yourname/.config/wlrigctl/ws-cert.pem"
+# tls_key  = "/home/yourname/.config/wlrigctl/ws-key.pem"
 
 
 

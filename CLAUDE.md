@@ -93,12 +93,18 @@ response.
 
 ### WebSocket server architecture (`ws.rs`)
 Wavelog's WebSocket support is designed around WaveLogGate (the Electron
-desktop companion), which acts as the WS *server* on ports 54322/54323; the
+desktop companion), which acts as the WS *server* on port 54323 (WSS); the
 browser connects outbound to it.  wlrigctl provides the same server role: when
-`[websocket]` is present in the config it binds a plain (no TLS) WebSocket
-server (default `127.0.0.1:54322`) and pushes `radio_status` JSON frames
-matching the WaveLogGate wire format.  No TLS/WSS is needed because the server
-is localhost-only.
+`[websocket]` is present in the config it binds a **WSS** server (default
+`127.0.0.1:54323`) and pushes `radio_status` JSON frames matching the
+WaveLogGate wire format.
+
+TLS is mandatory — Wavelog's `cat.js` hardcodes `wss://127.0.0.1:54323/`
+(WSS), and browsers refuse mixed-content `ws://` connections from HTTPS pages.
+If no `tls_cert`/`tls_key` are configured, a self-signed certificate is
+generated at startup using `rcgen`; the browser shows a one-time security
+warning which the user must accept by visiting `https://127.0.0.1:54323/`.
+Users who want a clean experience should use `mkcert` — see `example.toml`.
 
 The `cat_url` field in `[wavelog]` is included in every live-radio POST to
 Wavelog's `/index.php/api/radio` endpoint.  When set, Wavelog auto-registers the
@@ -126,7 +132,10 @@ the Wavelog admin panel.
 | `reqwest` | Wavelog HTTP client (us → Wavelog), rustls-tls backend |
 | `config` | TOML config file loading (toml feature; yaml feature not needed) |
 | `home` | XDG-aware home directory (replaces deprecated std::env::home_dir) |
-| `tokio-tungstenite` | WebSocket server (wraps tungstenite over tokio TCP) |
+| `tokio-tungstenite` | WebSocket server (wraps tungstenite over tokio TLS TCP) |
+| `tokio-rustls` | TLS acceptor wrapping each TCP stream before WebSocket upgrade |
+| `rustls` / `rustls-pemfile` | TLS server config; PEM cert/key file loading |
+| `rcgen` | Self-signed certificate generation when no cert files are configured |
 | `futures-util` | `SinkExt`/`StreamExt` traits needed by tungstenite async API |
 | `quick-xml` | Pulled in transitively; not used directly |
 

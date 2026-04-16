@@ -30,6 +30,10 @@ bincode2 = "2.0.1"
 tokio-util = { version = "0.7" }
 tokio-tungstenite = "0.21"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+rcgen = "0.12"
+rustls = "0.21"
+rustls-pemfile = "1"
+tokio-rustls = "0.24"
 
 [profile.release]
 strip = "symbols"
