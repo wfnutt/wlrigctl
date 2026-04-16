@@ -21,13 +21,22 @@ pub type HttpResponse = Response<Full<Bytes>>;
 
 use http_body_util::Full;
 
-use crate::{flrig, flrig::Mode};
+use crate::{flrig, flrig::Mode, flrig::ModeMap};
 
 #[derive(Debug, Deserialize)]
 pub struct CatSettings {
     pub host: String,
     pub port: u16,
-    pub yaesu: bool,
+    /// FLRig mode string to use for CW.  Defaults to "CW" (ICOM/Kenwood/Elecraft).
+    /// Set to "CW-U" for Yaesu rigs that require an explicit sideband suffix.
+    pub cw_mode: Option<String>,
+    /// FLRig mode string to use for RTTY.  Defaults to "RTTY".
+    /// Use "RTTY-U" for Yaesu, "FSK" for Kenwood rigs that name it differently.
+    pub rtty_mode: Option<String>,
+    /// FLRig mode string to use for digital modes (FT8, PSK31, etc.).
+    /// Defaults to "D-USB" (IC-703).  Use "DATA-U" for Yaesu, "USB-D" for
+    /// newer ICOM rigs (IC-7300 etc.), "DATA" for Elecraft.
+    pub digital_mode: Option<String>,
     /// FT8 dial frequencies in Hz. Overrides the built-in list when present.
     /// Example: ft8_frequencies = [1840000, 3575000, 7074000]
     pub ft8_frequencies: Option<Vec<u64>>,
@@ -156,77 +165,24 @@ fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, HttpResponse> {
     })
 }
 
-// When Wavelog requests CAT control to change transceiver frequency we try to provide some
-// assistance because the modes emanating from the Wavelog Bandmap haven't always been great.
-// Use some really simple heuristics to try to get things broadly correct:
+// Map a Wavelog bandmap mode + frequency to the FLRig mode string for the
+// connected rig.  The rig-specific mode names (e.g. "CW-U" vs "CW") come
+// from the ModeMap built at startup from the [CAT] config section.
 //
-// * If the frequency appears to be a known FT8 frequency, jump to the required mode
-//   - The IC-703 has a D-USB mode
-//
-// * Otherwise if we're dealing with a phone mode, force that to LSB if the frequency is below 10MHz
-//
-// * But if someone is explicitly selecting USB, assume they know best, because LSB/USB is after all
-//   only a convention.
-//
-// * If it's some other digital mode, then use RTTY
-//   (perhaps I'll do more digi modes one day, and realise this behaviour is too naive...!)
-//
-// See unit tests at bottom of file
-//
-// Oh, but life is never simple, is it? Turns out FLRig replicates the modes displayed on a rig's
-// panel rather than provide a single, brand-agnostic interface for transceiver mode.
-// This is great for the GUI, but rubbish for XMLRPC.
-// So on a Yaesu FTDX10 for example, there is no "CW" mode at all; one must explicitly select
-// either CW-U or CW-L. Similarly, there's RTTY-U or RTTY-L as well...
-fn wavelog_to_flrig_mode(freq: f64, mode: WavelogMode, ft8_freqs: &[f64]) -> Mode {
+// Heuristics applied:
+// * Digi/RTTY at a known FT8 frequency → mode_map.digital (the rig's data mode)
+// * Digi/RTTY elsewhere               → mode_map.rtty
+// * Phone below 10 MHz                → LSB (convention)
+// * Phone at or above 10 MHz          → USB (convention)
+// * Explicit LSB/USB/AM/FM/CW         → pass straight through via the mode map
+fn wavelog_to_flrig_mode(freq: f64, mode: WavelogMode, ft8_freqs: &[f64], mode_map: &ModeMap) -> Mode {
     match mode {
-        WavelogMode::Cw => Mode::CW,
-        WavelogMode::Phone => {
-            if freq < 10_000_000.0 {
-                Mode::LSB
-            } else {
-                Mode::USB
-            }
-        },
+        WavelogMode::Cw => mode_map.cw,
+        WavelogMode::Phone => if freq < 10_000_000.0 { Mode::LSB } else { Mode::USB },
         WavelogMode::LSB => Mode::LSB,
         WavelogMode::USB => Mode::USB,
-        WavelogMode::Digi => if is_ft8(freq, ft8_freqs) {
-            Mode::D_USB
-        } else {
-            Mode::RTTY
-        },
-        WavelogMode::Rtty => if is_ft8(freq, ft8_freqs) {
-            Mode::D_USB
-        } else {
-            Mode::RTTY
-        },
-        WavelogMode::Am => Mode::AM,
-        WavelogMode::Fm => Mode::FM,
-    }
-}
-
-// Yaesu version to handle explicit mode naming (-U vs -L)
-fn wavelog_to_yaesu_flrig_mode(freq: f64, mode: WavelogMode, ft8_freqs: &[f64]) -> Mode {
-    match mode {
-        WavelogMode::Cw => Mode::CW_U,
-        WavelogMode::Phone => {
-            if freq < 10_000_000.0 {
-                Mode::LSB
-            } else {
-                Mode::USB
-            }
-        },
-        WavelogMode::LSB => Mode::LSB,
-        WavelogMode::USB => Mode::USB,
-        WavelogMode::Digi => if is_ft8(freq, ft8_freqs) {
-            Mode::DATA_U
-        } else {
-            Mode::RTTY_U
-        },
-        WavelogMode::Rtty => if is_ft8(freq, ft8_freqs) {
-            Mode::DATA_U
-        } else {
-            Mode::RTTY_U
+        WavelogMode::Digi | WavelogMode::Rtty => {
+            if is_ft8(freq, ft8_freqs) { mode_map.digital } else { mode_map.rtty }
         },
         WavelogMode::Am => Mode::AM,
         WavelogMode::Fm => Mode::FM,
@@ -236,7 +192,7 @@ fn wavelog_to_yaesu_flrig_mode(freq: f64, mode: WavelogMode, ft8_freqs: &[f64]) 
 async fn qsy(
     rig: Arc<flrig::FLRig>,
     req: Request<hyper::body::Incoming>,
-    yaesu: bool,
+    mode_map: Arc<ModeMap>,
     ft8_freqs: Arc<[f64]>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     info!("qsy() called with: {}", &req.uri().path());
@@ -249,10 +205,7 @@ async fn qsy(
     info!("Got freq:{} mode:{:?}", qsyinfo.freq, qsyinfo.mode);
     let freq: f64 = qsyinfo.freq;
 
-    let mode = match yaesu {
-        true => wavelog_to_yaesu_flrig_mode(freq, qsyinfo.mode, &ft8_freqs),
-        false => wavelog_to_flrig_mode(freq, qsyinfo.mode, &ft8_freqs),
-    };
+    let mode = wavelog_to_flrig_mode(freq, qsyinfo.mode, &ft8_freqs, &mode_map);
 
     if let Err(e) = rig.set_vfo(freq).await {
         return Ok(http_err_str(
@@ -300,7 +253,12 @@ pub async fn CAT_thread(
         });
     let addr = SocketAddr::from((cat_ipv4, settings.port));
 
-    let yaesu: bool = settings.yaesu;
+    // Build the mode map from config; defaults to ICOM/generic names if fields are absent.
+    let mode_map: Arc<ModeMap> = Arc::new(flrig::build_mode_map(
+        settings.cw_mode.as_deref(),
+        settings.rtty_mode.as_deref(),
+        settings.digital_mode.as_deref(),
+    ));
 
     // Build the FT8 frequency list: use the config override if provided, otherwise defaults.
     let ft8_freqs: Arc<[f64]> = match settings.ft8_frequencies {
@@ -309,7 +267,6 @@ pub async fn CAT_thread(
     };
 
     info!("Listening for CAT requests from Wavelog on: {:#?}", addr);
-    info!("Yaesu mode is: {:#?}", yaesu);
 
     let listener = TcpListener::bind(addr).await?;
 
@@ -324,13 +281,14 @@ pub async fn CAT_thread(
         };
         let io = TokioIo::new(stream);
         let rig_for_qsy = rig.clone();
+        let mode_map_for_qsy = mode_map.clone();
         let ft8_freqs_for_qsy = ft8_freqs.clone();
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .half_close(true)
                 .serve_connection(
                     io,
-                    service_fn(move |req| qsy(rig_for_qsy.clone(), req, yaesu, ft8_freqs_for_qsy.clone())),
+                    service_fn(move |req| qsy(rig_for_qsy.clone(), req, mode_map_for_qsy.clone(), ft8_freqs_for_qsy.clone())),
                 )
                 .await
             {
@@ -475,201 +433,157 @@ mod tests {
     #[test]
     fn ft8_6m_above() { assert!(!is_ft8(50_316_000.0, &DEFAULT_FT8_FREQS)); }
 
+    // Helpers: construct a ModeMap for testing without config or a live FLRig.
+    fn icom_mode_map() -> ModeMap { flrig::build_mode_map(None, None, None) }
+    fn yaesu_mode_map() -> ModeMap { flrig::build_mode_map(Some("CW-U"), Some("RTTY-U"), Some("DATA-U")) }
+
     //////////////////////////////////////////////////////////////
-    // Tests for Bandlist/Cluster mode/frequency conversions to FLRig mode
+    // Tests for Bandlist/Cluster mode/frequency conversions (ICOM/generic map)
+    // FT8 detection only overrides Digi and Rtty; other modes pass through.
     //////////////////////////////////////////////////////////////
-    // FT8 detection only overrides Digi and Rtty; other modes pass through normally.
+
     #[test]
     fn flrig_40m_ft8_digi_rtty_become_d_usb() {
         const FT8_40M: f64 = 7_074_000.0;
-        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Digi, &DEFAULT_FT8_FREQS), Mode::D_USB);
-        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Rtty, &DEFAULT_FT8_FREQS), Mode::D_USB);
+        let m = icom_mode_map();
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Digi, &DEFAULT_FT8_FREQS, &m), Mode::D_USB);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Rtty, &DEFAULT_FT8_FREQS, &m), Mode::D_USB);
     }
 
     #[test]
     fn flrig_40m_ft8_other_modes_unaffected() {
         const FT8_40M: f64 = 7_074_000.0;
-        // CW stays CW, Phone→LSB (below 10 MHz), explicit LSB/USB pass through, AM/FM unchanged
-        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Cw,    &DEFAULT_FT8_FREQS), Mode::CW);
-        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Phone,  &DEFAULT_FT8_FREQS), Mode::LSB);
-        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::LSB,    &DEFAULT_FT8_FREQS), Mode::LSB);
-        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::USB,    &DEFAULT_FT8_FREQS), Mode::USB);
-        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Am,     &DEFAULT_FT8_FREQS), Mode::AM);
-        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Fm,     &DEFAULT_FT8_FREQS), Mode::FM);
+        let m = icom_mode_map();
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Cw,    &DEFAULT_FT8_FREQS, &m), Mode::CW);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Phone,  &DEFAULT_FT8_FREQS, &m), Mode::LSB);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::LSB,    &DEFAULT_FT8_FREQS, &m), Mode::LSB);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::USB,    &DEFAULT_FT8_FREQS, &m), Mode::USB);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Am,     &DEFAULT_FT8_FREQS, &m), Mode::AM);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Fm,     &DEFAULT_FT8_FREQS, &m), Mode::FM);
     }
 
     #[test]
     fn flrig_40m_cw() {
-        const BAND_40M: [f64; 5] = [
-            7_000_000.0,
-            7_030_000.0,
-            7_100_000.0,
-            7_185_000.0,
-            7_200_000.0,
-        ];
-
+        let m = icom_mode_map();
+        const BAND_40M: [f64; 5] = [7_000_000.0, 7_030_000.0, 7_100_000.0, 7_185_000.0, 7_200_000.0];
         for freq in BAND_40M {
-            assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::Cw, &DEFAULT_FT8_FREQS),
-                Mode::CW
-            );
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::Cw, &DEFAULT_FT8_FREQS, &m), Mode::CW);
         }
     }
 
     #[test]
     fn flrig_40m_phone() {
-        const BAND_40M: [f64; 5] = [
-            7_000_000.0,
-            7_030_000.0,
-            7_100_000.0,
-            7_185_000.0,
-            7_200_000.0,
-        ];
-
+        let m = icom_mode_map();
+        const BAND_40M: [f64; 5] = [7_000_000.0, 7_030_000.0, 7_100_000.0, 7_185_000.0, 7_200_000.0];
         for freq in BAND_40M {
-            assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::Phone, &DEFAULT_FT8_FREQS),
-                Mode::LSB
-            );
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::Phone, &DEFAULT_FT8_FREQS, &m), Mode::LSB);
         }
     }
 
     #[test]
     fn flrig_40m_lsb() {
-        const BAND_40M: [f64; 5] = [
-            7_000_000.0,
-            7_030_000.0,
-            7_100_000.0,
-            7_185_000.0,
-            7_200_000.0,
-        ];
-
+        let m = icom_mode_map();
+        const BAND_40M: [f64; 5] = [7_000_000.0, 7_030_000.0, 7_100_000.0, 7_185_000.0, 7_200_000.0];
         for freq in BAND_40M {
-            assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::LSB, &DEFAULT_FT8_FREQS),
-                Mode::LSB
-            );
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::LSB, &DEFAULT_FT8_FREQS, &m), Mode::LSB);
         }
     }
 
     #[test]
     fn flrig_40m_usb() {
-        const BAND_40M: [f64; 5] = [
-            7_000_000.0,
-            7_030_000.0,
-            7_100_000.0,
-            7_185_000.0,
-            7_200_000.0,
-        ];
-
+        let m = icom_mode_map();
+        const BAND_40M: [f64; 5] = [7_000_000.0, 7_030_000.0, 7_100_000.0, 7_185_000.0, 7_200_000.0];
         for freq in BAND_40M {
-            assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::USB, &DEFAULT_FT8_FREQS),
-                Mode::USB
-            );
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::USB, &DEFAULT_FT8_FREQS, &m), Mode::USB);
         }
     }
 
     #[test]
     fn flrig_40m_digi_rtty() {
-        const BAND_40M: [f64; 5] = [
-            7_000_000.0,
-            7_030_000.0,
-            7_100_000.0,
-            7_185_000.0,
-            7_200_000.0,
-        ];
-
+        let m = icom_mode_map();
+        const BAND_40M: [f64; 5] = [7_000_000.0, 7_030_000.0, 7_100_000.0, 7_185_000.0, 7_200_000.0];
         for freq in BAND_40M {
-            assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::Digi, &DEFAULT_FT8_FREQS),
-                Mode::RTTY
-            );
-
-            assert_eq!(
-                wavelog_to_flrig_mode(freq, WavelogMode::Rtty, &DEFAULT_FT8_FREQS),
-                Mode::RTTY
-            );
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::Digi, &DEFAULT_FT8_FREQS, &m), Mode::RTTY);
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::Rtty, &DEFAULT_FT8_FREQS, &m), Mode::RTTY);
         }
     }
 
     #[test]
     fn flrig_am_fm() {
-        // AM and FM should map through regardless of frequency (no FT8 override applies)
-        assert_eq!(wavelog_to_flrig_mode(7_200_000.0, WavelogMode::Am, &DEFAULT_FT8_FREQS), Mode::AM);
-        assert_eq!(wavelog_to_flrig_mode(29_600_000.0, WavelogMode::Fm, &DEFAULT_FT8_FREQS), Mode::FM);
+        let m = icom_mode_map();
+        assert_eq!(wavelog_to_flrig_mode(7_200_000.0,  WavelogMode::Am, &DEFAULT_FT8_FREQS, &m), Mode::AM);
+        assert_eq!(wavelog_to_flrig_mode(29_600_000.0, WavelogMode::Fm, &DEFAULT_FT8_FREQS, &m), Mode::FM);
+    }
+
+    #[test]
+    fn flrig_20m_phone_becomes_usb() {
+        let m = icom_mode_map();
+        assert_eq!(wavelog_to_flrig_mode(14_225_000.0, WavelogMode::Phone, &DEFAULT_FT8_FREQS, &m), Mode::USB);
     }
 
     #[test]
     fn is_ft8_custom_freqs() {
-        // With a custom single-entry list, only that frequency window should match.
         let custom: [f64; 1] = [14_074_000.0];
         assert!(is_ft8(14_074_000.0, &custom));
         assert!(!is_ft8(7_074_000.0, &custom));
     }
 
-    // Also test 20m Phone → USB (above 10 MHz boundary) for the standard path.
-    #[test]
-    fn flrig_20m_phone_becomes_usb() {
-        assert_eq!(wavelog_to_flrig_mode(14_225_000.0, WavelogMode::Phone, &DEFAULT_FT8_FREQS), Mode::USB);
-    }
-
     //////////////////////////////////////////////////////////////
-    // Tests for Yaesu mode conversions (wavelog_to_yaesu_flrig_mode)
-    // Key differences from the standard path:
-    //   CW  → CW_U   (not CW)
-    //   Digi/Rtty at FT8 freq → DATA_U  (not D_USB)
-    //   Digi/Rtty elsewhere   → RTTY_U  (not RTTY)
+    // Tests for Yaesu mode map (CW→CW_U, Digi/Rtty→DATA_U or RTTY_U)
     //////////////////////////////////////////////////////////////
 
     #[test]
     fn yaesu_ft8_digi_rtty_become_data_u() {
         const FT8_40M: f64 = 7_074_000.0;
-        assert_eq!(wavelog_to_yaesu_flrig_mode(FT8_40M, WavelogMode::Digi, &DEFAULT_FT8_FREQS), Mode::DATA_U);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(FT8_40M, WavelogMode::Rtty, &DEFAULT_FT8_FREQS), Mode::DATA_U);
+        let m = yaesu_mode_map();
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Digi, &DEFAULT_FT8_FREQS, &m), Mode::DATA_U);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Rtty, &DEFAULT_FT8_FREQS, &m), Mode::DATA_U);
     }
 
     #[test]
     fn yaesu_ft8_other_modes_unaffected() {
         const FT8_40M: f64 = 7_074_000.0;
-        assert_eq!(wavelog_to_yaesu_flrig_mode(FT8_40M, WavelogMode::Cw,   &DEFAULT_FT8_FREQS), Mode::CW_U);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(FT8_40M, WavelogMode::Phone, &DEFAULT_FT8_FREQS), Mode::LSB);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(FT8_40M, WavelogMode::LSB,   &DEFAULT_FT8_FREQS), Mode::LSB);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(FT8_40M, WavelogMode::USB,   &DEFAULT_FT8_FREQS), Mode::USB);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(FT8_40M, WavelogMode::Am,    &DEFAULT_FT8_FREQS), Mode::AM);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(FT8_40M, WavelogMode::Fm,    &DEFAULT_FT8_FREQS), Mode::FM);
+        let m = yaesu_mode_map();
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Cw,    &DEFAULT_FT8_FREQS, &m), Mode::CW_U);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Phone,  &DEFAULT_FT8_FREQS, &m), Mode::LSB);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::LSB,    &DEFAULT_FT8_FREQS, &m), Mode::LSB);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::USB,    &DEFAULT_FT8_FREQS, &m), Mode::USB);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Am,     &DEFAULT_FT8_FREQS, &m), Mode::AM);
+        assert_eq!(wavelog_to_flrig_mode(FT8_40M, WavelogMode::Fm,     &DEFAULT_FT8_FREQS, &m), Mode::FM);
     }
 
     #[test]
     fn yaesu_40m_cw_becomes_cw_u() {
+        let m = yaesu_mode_map();
         const BAND_40M: [f64; 3] = [7_000_000.0, 7_030_000.0, 7_200_000.0];
         for freq in BAND_40M {
-            assert_eq!(wavelog_to_yaesu_flrig_mode(freq, WavelogMode::Cw, &DEFAULT_FT8_FREQS), Mode::CW_U);
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::Cw, &DEFAULT_FT8_FREQS, &m), Mode::CW_U);
         }
     }
 
     #[test]
     fn yaesu_phone_lsb_usb_boundary() {
-        // Below 10 MHz → LSB; at or above → USB (same split as non-Yaesu)
-        assert_eq!(wavelog_to_yaesu_flrig_mode(7_150_000.0,  WavelogMode::Phone, &DEFAULT_FT8_FREQS), Mode::LSB);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(14_225_000.0, WavelogMode::Phone, &DEFAULT_FT8_FREQS), Mode::USB);
-        // Explicit LSB/USB always pass through
-        assert_eq!(wavelog_to_yaesu_flrig_mode(7_150_000.0,  WavelogMode::LSB, &DEFAULT_FT8_FREQS), Mode::LSB);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(14_225_000.0, WavelogMode::USB, &DEFAULT_FT8_FREQS), Mode::USB);
+        let m = yaesu_mode_map();
+        assert_eq!(wavelog_to_flrig_mode(7_150_000.0,  WavelogMode::Phone, &DEFAULT_FT8_FREQS, &m), Mode::LSB);
+        assert_eq!(wavelog_to_flrig_mode(14_225_000.0, WavelogMode::Phone, &DEFAULT_FT8_FREQS, &m), Mode::USB);
+        assert_eq!(wavelog_to_flrig_mode(7_150_000.0,  WavelogMode::LSB,   &DEFAULT_FT8_FREQS, &m), Mode::LSB);
+        assert_eq!(wavelog_to_flrig_mode(14_225_000.0, WavelogMode::USB,   &DEFAULT_FT8_FREQS, &m), Mode::USB);
     }
 
     #[test]
     fn yaesu_40m_digi_rtty_become_rtty_u() {
+        let m = yaesu_mode_map();
         const BAND_40M: [f64; 3] = [7_000_000.0, 7_030_000.0, 7_200_000.0];
         for freq in BAND_40M {
-            assert_eq!(wavelog_to_yaesu_flrig_mode(freq, WavelogMode::Digi, &DEFAULT_FT8_FREQS), Mode::RTTY_U);
-            assert_eq!(wavelog_to_yaesu_flrig_mode(freq, WavelogMode::Rtty, &DEFAULT_FT8_FREQS), Mode::RTTY_U);
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::Digi, &DEFAULT_FT8_FREQS, &m), Mode::RTTY_U);
+            assert_eq!(wavelog_to_flrig_mode(freq, WavelogMode::Rtty, &DEFAULT_FT8_FREQS, &m), Mode::RTTY_U);
         }
     }
 
     #[test]
     fn yaesu_am_fm() {
-        assert_eq!(wavelog_to_yaesu_flrig_mode(7_200_000.0,  WavelogMode::Am, &DEFAULT_FT8_FREQS), Mode::AM);
-        assert_eq!(wavelog_to_yaesu_flrig_mode(29_600_000.0, WavelogMode::Fm, &DEFAULT_FT8_FREQS), Mode::FM);
+        let m = yaesu_mode_map();
+        assert_eq!(wavelog_to_flrig_mode(7_200_000.0,  WavelogMode::Am, &DEFAULT_FT8_FREQS, &m), Mode::AM);
+        assert_eq!(wavelog_to_flrig_mode(29_600_000.0, WavelogMode::Fm, &DEFAULT_FT8_FREQS, &m), Mode::FM);
     }
 }
