@@ -1,5 +1,5 @@
 use crate::wavelog::RadioData;
-use log::{debug, info};
+use log::{debug, info, warn};
 use serde_derive::Deserialize;
 use std::fmt;
 use std::result::Result;
@@ -89,6 +89,9 @@ pub enum Mode {
     DATA_FM,
     DATA_FMN,
     PSK,
+    FSK,   // Kenwood RTTY
+    USB_D, // newer ICOM digital (e.g. IC-7300); cf. D-USB on IC-703
+    DATA,  // Elecraft generic data
 }
 
 #[allow(dead_code)]
@@ -116,6 +119,9 @@ impl fmt::Display for Mode {
             Mode::DATA_FM => write!(f, "DATA-FM"),
             Mode::DATA_FMN => write!(f, "DATA-FMN"),
             Mode::PSK => write!(f, "PSK"),
+            Mode::FSK => write!(f, "FSK"),
+            Mode::USB_D => write!(f, "USB-D"),
+            Mode::DATA => write!(f, "DATA"),
         }
     }
 }
@@ -135,7 +141,8 @@ impl Mode {
             Mode::CW  | Mode::CW_U | Mode::CW_R | Mode::CW_L => "CW",
             Mode::RTTY | Mode::RTTY_U | Mode::RTTY_R | Mode::RTTY_L => "RTTY",
             Mode::FM | Mode::FM_N | Mode::DATA_FM | Mode::DATA_FMN  => "FM",
-            Mode::PSK => "USB",
+            Mode::PSK | Mode::USB_D | Mode::DATA => "USB",
+            Mode::FSK => "RTTY",
         }
     }
 }
@@ -166,9 +173,53 @@ impl FromStr for Mode {
             "DATA-FM" => Ok(Mode::DATA_FM),
             "DATA-FMN" => Ok(Mode::DATA_FMN),
             "PSK" => Ok(Mode::PSK),
+            "FSK" => Ok(Mode::FSK),
+            "USB-D" => Ok(Mode::USB_D),
+            "DATA" => Ok(Mode::DATA),
             _ => Err(()),
         }
     }
+}
+
+/// The FLRig mode string to send for each logical concept when responding to a
+/// Wavelog CAT QSY request.  Built once at CAT_thread startup from the [CAT]
+/// config section.
+#[derive(Debug, Clone)]
+pub struct ModeMap {
+    pub cw: Mode,
+    pub rtty: Mode,
+    pub digital: Mode,
+}
+
+/// Build a [`ModeMap`] from the optional mode strings supplied in the [CAT]
+/// config section.  Each field defaults to the ICOM/generic name if absent or
+/// unrecognised:
+///
+/// | concept | default |
+/// |---------|---------|
+/// | cw      | `CW`    |
+/// | rtty    | `RTTY`  |
+/// | digital | `D-USB` |
+pub fn build_mode_map(cw: Option<&str>, rtty: Option<&str>, digital: Option<&str>) -> ModeMap {
+    fn resolve(s: Option<&str>, default: Mode, field: &str) -> Mode {
+        match s {
+            None => default,
+            Some(name) => match name.parse::<Mode>() {
+                Ok(m) => m,
+                Err(_) => {
+                    warn!("Unrecognised mode '{name}' for {field}; using default '{default}'");
+                    default
+                }
+            },
+        }
+    }
+    let map = ModeMap {
+        cw:      resolve(cw,      Mode::CW,    "cw_mode"),
+        rtty:    resolve(rtty,    Mode::RTTY,  "rtty_mode"),
+        digital: resolve(digital, Mode::D_USB, "digital_mode"),
+    };
+    info!("Mode map: CW='{}' RTTY='{}' Digital='{}'", map.cw, map.rtty, map.digital);
+    map
 }
 
 impl FLRig {
@@ -341,6 +392,42 @@ mod tests {
     }
 
     #[test]
+    fn mode_map_defaults_to_icom() {
+        let m = build_mode_map(None, None, None);
+        assert_eq!(m.cw,      Mode::CW);
+        assert_eq!(m.rtty,    Mode::RTTY);
+        assert_eq!(m.digital, Mode::D_USB);
+    }
+
+    #[test]
+    fn mode_map_yaesu_config() {
+        let m = build_mode_map(Some("CW-U"), Some("RTTY-U"), Some("DATA-U"));
+        assert_eq!(m.cw,      Mode::CW_U);
+        assert_eq!(m.rtty,    Mode::RTTY_U);
+        assert_eq!(m.digital, Mode::DATA_U);
+    }
+
+    #[test]
+    fn mode_map_kenwood_config() {
+        let m = build_mode_map(Some("CW"), Some("FSK"), Some("USB-D"));
+        assert_eq!(m.cw,      Mode::CW);
+        assert_eq!(m.rtty,    Mode::FSK);
+        assert_eq!(m.digital, Mode::USB_D);
+    }
+
+    #[test]
+    fn mode_map_elecraft_config() {
+        let m = build_mode_map(Some("CW"), Some("RTTY"), Some("DATA"));
+        assert_eq!(m.digital, Mode::DATA);
+    }
+
+    #[test]
+    fn mode_map_unknown_mode_falls_back_to_default() {
+        let m = build_mode_map(Some("CW-UNKNOWN"), Some("FSK"), Some("D-USB"));
+        assert_eq!(m.cw, Mode::CW); // fell back to default
+    }
+
+    #[test]
     fn wavelog_mode_standard_passthrough() {
         // Standard modes should come through unchanged.
         assert_eq!(Mode::LSB.to_wavelog_mode(),  "LSB");
@@ -381,6 +468,13 @@ mod tests {
     #[test]
     fn wavelog_mode_am_narrow() {
         assert_eq!(Mode::AM_N.to_wavelog_mode(), "AM");
+    }
+
+    #[test]
+    fn wavelog_mode_new_variants() {
+        assert_eq!(Mode::FSK.to_wavelog_mode(),   "RTTY"); // Kenwood FSK = RTTY
+        assert_eq!(Mode::USB_D.to_wavelog_mode(), "USB");  // newer ICOM digital
+        assert_eq!(Mode::DATA.to_wavelog_mode(),  "USB");  // Elecraft data
     }
 
     #[test]
