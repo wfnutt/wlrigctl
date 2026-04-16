@@ -5,6 +5,7 @@ use serde::Serialize;
 use serde_derive::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use tokio::time::Duration;
 use tokio_util::sync::CancellationToken;
 
@@ -71,7 +72,12 @@ pub async fn upload_wsjtx_qso_data(
     Ok(())
 }
 
-pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>, token: CancellationToken) {
+pub fn wavelog_thread(
+    settings: WavelogSettings,
+    rig_poll: Arc<flrig::FLRig>,
+    token: CancellationToken,
+    ws_tx: broadcast::Sender<Arc<RadioData>>,
+) {
     let mut radio_data_current = RadioData {
         key: settings.key.clone(),
         radio: settings.identifier.clone(),
@@ -99,6 +105,8 @@ pub fn wavelog_thread(settings: WavelogSettings, rig_poll: Arc<flrig::FLRig>, to
                         {
                             debug!("Wavelog upload failed (may be transient): {e}");
                         }
+                        // Broadcast to WebSocket clients; ignored if no listeners.
+                        let _ = ws_tx.send(Arc::new(radio_data_current.clone()));
                     }
                 }
                 Ok(None) => {} // FLRig reports nothing changed; skip this cycle

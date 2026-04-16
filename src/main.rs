@@ -8,6 +8,7 @@ use std::process;
 use std::sync::Arc;
 
 use log::info;
+use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
 use crate::cat::CAT_thread;
@@ -49,8 +50,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let token = CancellationToken::new();
 
+    // Channel for streaming live radio state to WebSocket clients.
+    // Capacity 4: clients that fall behind are dropped without blocking the poll loop.
+    let (ws_tx, _) = broadcast::channel::<Arc<wavelog::RadioData>>(4);
+
     // polling of FLRig frequency. Issue http requests to wavelog to update live frequency
-    wavelog_thread(settings.wavelog.clone(), rig.clone(), token.clone());
+    wavelog_thread(settings.wavelog.clone(), rig.clone(), token.clone(), ws_tx.clone());
 
     // Separate thread for someone logging from WSJTX via UDP on port 2237
     wsjtx_thread(settings.wsjtx, settings.wavelog, token.clone());
