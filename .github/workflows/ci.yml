@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+
+  # ── Test ──────────────────────────────────────────────────────────────────
+  # Runs on every push and pull request.
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -- -D warnings
+      - run: cargo test
+
+  # ── Build ─────────────────────────────────────────────────────────────────
+  # Verifies the release binary compiles on every push.
+  # Produces the binary as a downloadable artifact (kept 7 days).
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wlrigctl-${{ github.sha }}
+          path: target/release/wlrigctl
+          retention-days: 7
+
+  # ── Package ───────────────────────────────────────────────────────────────
+  # Runs only when a semver tag is pushed (v0.4.0, v1.2.3, …).
+  # Builds the .deb and attaches it to a GitHub Release.
+  #
+  # To release:
+  #   git tag v0.4.0 && git push origin v0.4.0
+
+  package:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create a GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - run: cargo install cargo-deb
+      - run: cargo deb --no-build
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: target/debian/*.deb
