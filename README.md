@@ -45,13 +45,24 @@ The eventual goal is to migrate the logging at the club (BADARC) to Wavelog.
 3. Gatewaying clicks in the Wavelog cluster view through to flrig CAT control so
    that your rig tunes to the band and frequency required.
 
-## Building
+## Installing
+
+Pre-built `.deb` packages for each release are attached to the
+[GitHub Releases](https://github.com/wfnutt/wlrigctl/releases) page.
+Download the latest `.deb` and install it:
+
+```
+$ sudo apt install ./wlrigctl_*.deb
+
+$ mkdir -p ~/.config/wlrigctl/
+$ cp /usr/share/wlrigctl/example.toml ~/.config/wlrigctl/config.toml
+```
+
+## Building from source
 
 This software only works on Linux. It might one day be ported to *BSD.
 
-_Windows* and MacOS* will never be supported. Stop using them._
-
-It's Rust, so build from source:
+_Windows and MacOS will never be supported. Stop using them._
 
 ```
 $ git clone -b main --single-branch --no-tags \
@@ -59,21 +70,6 @@ $ git clone -b main --single-branch --no-tags \
 $ cd wlrigctl
 $ cargo install cargo-deb
 $ cargo deb
-```
-
-_OPTION: take target/debian/wlrigctl.deb to your radio club..._
-
-## Installing
-
-The build process created a .deb package, which should be usable on plenty of
-flavours of Linux. The daemon will run as you rather than root, so copy the
-example config file for the daemon.
-
-```
-$ sudo apt install target/debian/wlrigctl*.deb
-
-$ mkdir -p ~/.config/wlrigctl/
-$ cp /usr/share/wlrigctl/example.toml ~/.config/wlrigctl/config.toml
 ```
 
 ## Configuring
@@ -91,3 +87,31 @@ These are one-off operations.
 $ systemctl --user daemon-reload
 $ systemctl --user enable --now wlrigctl.service
 ```
+
+## WebSocket browser setup (one-time)
+
+wlrigctl serves live rig data over an encrypted WebSocket connection
+(`wss://127.0.0.1:54323/`) so Wavelog's band map can display your
+current frequency in real time.  The first time wlrigctl starts it
+generates a self-signed TLS certificate.  Before Wavelog can connect
+you need to tell your browser to trust it:
+
+1. Open **https://127.0.0.1:54323/** in the same browser you use for Wavelog
+2. Click **Advanced → Proceed to 127.0.0.1 (unsafe)**
+
+You only need to do this once.  After that the connection is automatic
+on every page load.  The certificate is saved to
+`~/.config/wlrigctl/ws-cert.pem` and reused on subsequent restarts.
+
+## Releasing (maintainers)
+
+Use `cargo-release` to cut a release.  It bumps the version in
+`Cargo.toml`, commits, tags, and pushes in one step:
+
+```
+$ cargo install cargo-release   # once
+$ cargo release 0.5.0
+```
+
+GitHub Actions picks up the tag, runs the test suite, and attaches the
+`.deb` to a new GitHub Release automatically.
