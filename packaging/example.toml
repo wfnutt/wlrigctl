@@ -15,6 +15,12 @@ station_profile_id = 1
 # interval is in milliseconds
 interval = 1000
 
+# When set, wlrigctl includes this URL in every live-radio POST so Wavelog can
+# auto-register the CAT callback.  Set it to the address of wlrigctl's CAT
+# server (the [CAT] host:port below).  Wavelog must be able to reach this URL
+# from the machine running the browser.
+# cat_url = "http://127.0.0.1:54321"
+
 
 
 # Used to retrieve data from the radio, to supply live VFO freq to QSO window
@@ -65,6 +71,21 @@ port = 54321
 #   17m 18100000 / 15m 21074000 / 12m 24915000 / 10m 28074000 / 6m 50313000
 # To override, uncomment and edit:
 # ft8_frequencies = [1840000, 3575000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000]
+
+
+# Optional WebSocket server.  When this section is present, wlrigctl listens
+# for WebSocket connections and pushes live rig state (frequency, mode, power)
+# as JSON text frames.  Wavelog's built-in WebSocket consumer (normally served
+# by WaveLogGate) can connect here instead.
+#
+# The default bind address is 127.0.0.1:54322.  Only change the host if you
+# need the server reachable from another machine; for local browser access the
+# default is correct and safest.
+#
+# [websocket]
+# host = "127.0.0.1"
+# port = 54322
+
 
 
 # For capturing QSO ADIF from WSJT-X

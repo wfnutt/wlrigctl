@@ -6,13 +6,18 @@ Club project: target deployment is BADARC (a local radio club).
 
 ## What it does
 
-Three concurrent async tasks glued together with `Arc<FLRig>`:
+Four concurrent async tasks glued together with `Arc<FLRig>`:
 
 | Task | Direction | Protocol |
 |---|---|---|
 | `wavelog_thread` | FLRig → Wavelog | XMLRPC poll + HTTP POST |
 | `wsjtx_thread` | WSJT-X → Wavelog | UDP receive + HTTP POST |
 | `CAT_thread` | Wavelog → FLRig | HTTP GET receive + XMLRPC |
+| `ws_thread` *(optional)* | FLRig → browser | WebSocket push |
+
+`wavelog_thread` and `ws_thread` share a `tokio::sync::broadcast` channel
+(capacity 4); `wavelog_thread` sends on every rig-state change, `ws_thread`
+fans the update out to all connected WebSocket clients.
 
 Config lives at `~/.config/wlrigctl/config.toml` (XDG-aware).
 Runs as a systemd user service (`systemctl --user`).
@@ -86,8 +91,29 @@ Wavelog's bandmap makes HTTP requests from browser JavaScript, which requires
 CORS headers (`Access-Control-Allow-*`). Without them the browser blocks the
 response.
 
+### WebSocket server architecture (`ws.rs`)
+Wavelog's WebSocket support is designed around WaveLogGate (the Electron
+desktop companion), which acts as the WS *server* on ports 54322/54323; the
+browser connects outbound to it.  wlrigctl provides the same server role: when
+`[websocket]` is present in the config it binds a plain (no TLS) WebSocket
+server (default `127.0.0.1:54322`) and pushes `radio_status` JSON frames
+matching the WaveLogGate wire format.  No TLS/WSS is needed because the server
+is localhost-only.
+
+The `cat_url` field in `[wavelog]` is included in every live-radio POST to
+Wavelog's `/index.php/api/radio` endpoint.  When set, Wavelog auto-registers the
+CAT callback URL so the bandmap QSY button works without manual configuration in
+the Wavelog admin panel.
+
 ## Remaining TODO items
 
+- **Add GitLab CI pipeline** — plan already written at
+  `/workspace/backup-riddle.md`. Creates `.gitlab-ci.yml` with three stages:
+  `test` (`cargo test`), `build` (`cargo build --release`, emits binary
+  artifact), `package` (runs only when `Cargo.toml` changes; compares version
+  against `HEAD~1`; if bumped, runs `cargo deb --no-build` and emits the `.deb`
+  as a pipeline artifact). Uses a shared cargo cache keyed on `Cargo.lock`;
+  `GIT_DEPTH: "2"` for the `HEAD~1` comparison.
 
 ## Dependency notes
 
@@ -100,6 +126,8 @@ response.
 | `reqwest` | Wavelog HTTP client (us → Wavelog), rustls-tls backend |
 | `config` | TOML config file loading (toml feature; yaml feature not needed) |
 | `home` | XDG-aware home directory (replaces deprecated std::env::home_dir) |
+| `tokio-tungstenite` | WebSocket server (wraps tungstenite over tokio TCP) |
+| `futures-util` | `SinkExt`/`StreamExt` traits needed by tungstenite async API |
 | `quick-xml` | Pulled in transitively; not used directly |
 
 ## Logging
