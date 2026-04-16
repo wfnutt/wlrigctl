@@ -35,17 +35,16 @@ Targets x86_64 and aarch64 (cross-compilation works).
 
 ## Cutting a release
 
-Use `cargo-release` (`cargo install cargo-release`).  It bumps the version
-in `Cargo.toml`, commits, creates the `vX.Y.Z` tag, and pushes — keeping the
-tag and `Cargo.toml` in sync automatically.
+1. Bump `version` in `Cargo.toml` and commit
+2. Push a matching tag:
 
 ```sh
-cargo release 0.5.0
+git tag v0.5.0 && git push origin v0.5.0
 ```
 
 GitHub Actions picks up the tag, runs the full test suite, and attaches the
-`.deb` to a GitHub Release.  Do not tag manually; the CI pipeline validates
-that the tag version matches `Cargo.toml` and will fail if they diverge.
+`.deb` to a GitHub Release.  The CI pipeline validates that the tag version
+matches `Cargo.toml` and will fail fast if they diverge.
 
 ## Known quirks and non-obvious design decisions
 

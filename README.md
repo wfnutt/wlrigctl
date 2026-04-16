@@ -105,13 +105,13 @@ on every page load.  The certificate is saved to
 
 ## Releasing (maintainers)
 
-Use `cargo-release` to cut a release.  It bumps the version in
-`Cargo.toml`, commits, tags, and pushes in one step:
+1. Bump `version` in `Cargo.toml` and commit
+2. Push a matching tag:
 
 ```
-$ cargo install cargo-release   # once
-$ cargo release 0.5.0
+$ git tag v0.5.0 && git push origin v0.5.0
 ```
 
 GitHub Actions picks up the tag, runs the test suite, and attaches the
-`.deb` to a new GitHub Release automatically.
+`.deb` to a new GitHub Release automatically.  The pipeline will fail
+if the tag and `Cargo.toml` version don't match.

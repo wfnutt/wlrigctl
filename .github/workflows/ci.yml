@@ -42,9 +42,10 @@ jobs:
   # Runs only when a semver tag is pushed (v0.4.0, v1.2.3, …).
   # Builds the .deb and attaches it to a GitHub Release.
   #
-  # Use cargo-release to cut a release — it keeps the tag and Cargo.toml
-  # version in sync automatically:
-  #   cargo release 0.5.0
+  # To release:
+  #   1. Bump version in Cargo.toml and commit
+  #   2. git tag v<version> && git push origin v<version>
+  # CI will fail fast if the tag and Cargo.toml version don't match.
 
   package:
     needs: test
