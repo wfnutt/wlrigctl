@@ -1,13 +1,13 @@
 # wlrigctl
 
-Wavelog Rig Control, Copyright (C) 2025 William Nutt, M7CLG.
+Wavelog Rig Control, Copyright (C) 2025-2026 William Nutt, M7CLG.
 
 Based upon clrigctl v0.2.0, Copyright (C) 2023 Martin Brodbeck, DG2SMB.
 
 ## History
 This is a fork of clrigctl v0.2.0, Copyright (C) 2023 Martin Brodbeck, DG2SMB.
 
-It has been adapted for Wavelog v2.2.1.
+It has been adapted for Wavelog v2.2.1 onwards.
 
 I first started tinkering with Martin's v0.2.0 clrigctl code when I was trying
 out 2E0SQL's Cloudlog logging application. One of the features I missed from
