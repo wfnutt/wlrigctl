@@ -8,8 +8,6 @@ use hyper_util::rt::TokioIo;
 use serde_derive::Deserialize;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
-
-const CAT_BIND_HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
@@ -24,6 +22,8 @@ pub type HttpResponse = Response<Full<Bytes>>;
 use http_body_util::Full;
 
 use crate::{flrig, flrig::Mode, flrig::ModeMap};
+
+const CAT_BIND_HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
 
 #[derive(Debug, Deserialize)]
 pub struct CatSettings {
