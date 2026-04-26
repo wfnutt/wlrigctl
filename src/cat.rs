@@ -184,21 +184,21 @@ fn parse_qsy_path<B>(req: &Request<B>, cat_token: &str) -> Result<Qsy, Box<HttpR
         .split('/')
         .collect();
 
-    if parts.len() != 3 {
+    let &[token, freq_str, mode_str] = parts.as_slice() else {
         return Err(Box::new(http_err_str(
             StatusCode::BAD_REQUEST,
             "Expected /<token>/<freq>/<mode>",
         )));
-    }
+    };
 
-    if parts[0] != cat_token {
+    if token != cat_token {
         return Err(Box::new(http_err_str(
             StatusCode::UNAUTHORIZED,
             "Invalid token",
         )));
     }
 
-    let freq: u32 = parts[1].parse::<u32>().map_err(|_| {
+    let freq: u32 = freq_str.parse::<u32>().map_err(|_| {
         Box::new(http_err_str(
             StatusCode::BAD_REQUEST,
             "Frequency must be a positive integer",
@@ -212,7 +212,7 @@ fn parse_qsy_path<B>(req: &Request<B>, cat_token: &str) -> Result<Qsy, Box<HttpR
         )));
     }
 
-    let mode = parts[2]
+    let mode = mode_str
         .parse::<WavelogMode>()
         .map_err(|_| Box::new(http_err_str(StatusCode::BAD_REQUEST, "Invalid mode")))?;
     Ok(Qsy {
