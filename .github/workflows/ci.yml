@@ -13,10 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup show   # installs toolchain pinned in rust-toolchain.toml
+      - uses: actions/cache@v4
         with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - run: cargo fmt --check
       - run: cargo clippy -- -D warnings
       - run: cargo test
 
@@ -29,8 +36,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - run: rustup show   # installs toolchain pinned in rust-toolchain.toml
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - run: cargo build --release
       - uses: actions/upload-artifact@v4
         with:
@@ -40,7 +55,8 @@ jobs:
 
   # ── Package ───────────────────────────────────────────────────────────────
   # Runs only when a semver tag is pushed (v0.4.0, v1.2.3, …).
-  # Builds the .deb and attaches it to a GitHub Release.
+  # Reuses the release binary from the build job to avoid compiling twice.
+  # Produces a .deb and attaches it to a GitHub Release.
   #
   # To release:
   #   1. Bump version in Cargo.toml and commit
@@ -48,15 +64,13 @@ jobs:
   # CI will fail fast if the tag and Cargo.toml version don't match.
 
   package:
-    needs: test
+    needs: [test, build]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required to create a GitHub Release
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
       - name: Verify tag matches Cargo.toml version
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -65,9 +79,24 @@ jobs:
             echo "::error::Tag v${TAG} does not match Cargo.toml version ${CARGO}"
             exit 1
           fi
-      - run: cargo build --release
-      - run: cargo install cargo-deb
-      - run: cargo deb --no-build
-      - uses: softprops/action-gh-release@v1
+      - uses: actions/download-artifact@v4
         with:
-          files: target/debian/*.deb
+          name: wlrigctl-${{ github.sha }}
+          path: target/release/
+      - run: chmod +x target/release/wlrigctl
+      - uses: actions/cache@v4
+        id: cache-cargo-deb
+        with:
+          path: ~/.cargo/bin/cargo-deb
+          key: cargo-deb-${{ runner.os }}
+      - if: steps.cache-cargo-deb.outputs.cache-hit != 'true'
+        run: rustup show && cargo install --locked cargo-deb
+      - run: cargo deb --no-build
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "Release ${{ github.ref_name }}" \
+            --generate-notes \
+            target/debian/*.deb
