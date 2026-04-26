@@ -136,11 +136,11 @@ impl Mode {
     pub fn to_wavelog_mode(self) -> &'static str {
         match self {
             Mode::LSB | Mode::D_LSB | Mode::DATA_L => "LSB",
-            Mode::USB | Mode::D_USB | Mode::DATA_U  => "USB",
-            Mode::AM  | Mode::AM_N                  => "AM",
-            Mode::CW  | Mode::CW_U | Mode::CW_R | Mode::CW_L => "CW",
+            Mode::USB | Mode::D_USB | Mode::DATA_U => "USB",
+            Mode::AM | Mode::AM_N => "AM",
+            Mode::CW | Mode::CW_U | Mode::CW_R | Mode::CW_L => "CW",
             Mode::RTTY | Mode::RTTY_U | Mode::RTTY_R | Mode::RTTY_L => "RTTY",
-            Mode::FM | Mode::FM_N | Mode::DATA_FM | Mode::DATA_FMN  => "FM",
+            Mode::FM | Mode::FM_N | Mode::DATA_FM | Mode::DATA_FMN => "FM",
             Mode::PSK | Mode::USB_D | Mode::DATA => "USB",
             Mode::FSK => "RTTY",
         }
@@ -214,11 +214,14 @@ pub fn build_mode_map(cw: Option<&str>, rtty: Option<&str>, digital: Option<&str
         }
     }
     let map = ModeMap {
-        cw:      resolve(cw,      Mode::CW,    "cw_mode"),
-        rtty:    resolve(rtty,    Mode::RTTY,  "rtty_mode"),
+        cw: resolve(cw, Mode::CW, "cw_mode"),
+        rtty: resolve(rtty, Mode::RTTY, "rtty_mode"),
         digital: resolve(digital, Mode::D_USB, "digital_mode"),
     };
-    info!("Mode map: CW='{}' RTTY='{}' Digital='{}'", map.cw, map.rtty, map.digital);
+    info!(
+        "Mode map: CW='{}' RTTY='{}' Digital='{}'",
+        map.cw, map.rtty, map.digital
+    );
     map
 }
 
@@ -264,25 +267,28 @@ impl FLRig {
         ];
         let mut results = self.client.multicall(calls).await?;
         // Pop in reverse call order; the Vec always has exactly as many entries as calls sent.
-        let power_r  = results.pop().expect("multicall result count mismatch");
+        let power_r = results.pop().expect("multicall result count mismatch");
         let maxpwr_r = results.pop().expect("multicall result count mismatch");
-        let mode_r   = results.pop().expect("multicall result count mismatch");
-        let vfo_r    = results.pop().expect("multicall result count mismatch");
+        let mode_r = results.pop().expect("multicall result count mismatch");
+        let vfo_r = results.pop().expect("multicall result count mismatch");
 
-        let vfo      = String::try_from_value(&vfo_r.map_err(ClientError::from)?)?;
+        let vfo = String::try_from_value(&vfo_r.map_err(ClientError::from)?)?;
         let mode_raw = String::try_from_value(&mode_r.map_err(ClientError::from)?)?;
-        let maxpwr   = i32::try_from_value(&maxpwr_r.map_err(ClientError::from)?)?;
-        let power    = i32::try_from_value(&power_r.map_err(ClientError::from)?)?;
+        let maxpwr = i32::try_from_value(&maxpwr_r.map_err(ClientError::from)?)?;
+        let power = i32::try_from_value(&power_r.map_err(ClientError::from)?)?;
 
         let maxpwr_u = if maxpwr < 0 { 0u32 } else { maxpwr as u32 };
-        let power_u  = if power  < 0 { 0u32 } else { power  as u32 };
+        let power_u = if power < 0 { 0u32 } else { power as u32 };
 
         // Translate the rig-specific FLRig mode string to one Wavelog understands.
         // If the string isn't in our Mode enum (e.g. a new rig adds an unknown mode),
         // pass it through unchanged rather than dropping or erroring.
         let mode = match mode_raw.parse::<Mode>() {
-            Ok(m)  => m.to_wavelog_mode().to_string(),
-            Err(_) => { debug!("Unknown FLRig mode '{mode_raw}', forwarding as-is"); mode_raw }
+            Ok(m) => m.to_wavelog_mode().to_string(),
+            Err(_) => {
+                debug!("Unknown FLRig mode '{mode_raw}', forwarding as-is");
+                mode_raw
+            }
         };
 
         debug!("freq:{vfo} mode:{mode} power:{power} max:{maxpwr}");
@@ -390,24 +396,24 @@ mod tests {
     #[test]
     fn mode_map_defaults_to_icom() {
         let m = build_mode_map(None, None, None);
-        assert_eq!(m.cw,      Mode::CW);
-        assert_eq!(m.rtty,    Mode::RTTY);
+        assert_eq!(m.cw, Mode::CW);
+        assert_eq!(m.rtty, Mode::RTTY);
         assert_eq!(m.digital, Mode::D_USB);
     }
 
     #[test]
     fn mode_map_yaesu_config() {
         let m = build_mode_map(Some("CW-U"), Some("RTTY-U"), Some("DATA-U"));
-        assert_eq!(m.cw,      Mode::CW_U);
-        assert_eq!(m.rtty,    Mode::RTTY_U);
+        assert_eq!(m.cw, Mode::CW_U);
+        assert_eq!(m.rtty, Mode::RTTY_U);
         assert_eq!(m.digital, Mode::DATA_U);
     }
 
     #[test]
     fn mode_map_kenwood_config() {
         let m = build_mode_map(Some("CW"), Some("FSK"), Some("USB-D"));
-        assert_eq!(m.cw,      Mode::CW);
-        assert_eq!(m.rtty,    Mode::FSK);
+        assert_eq!(m.cw, Mode::CW);
+        assert_eq!(m.rtty, Mode::FSK);
         assert_eq!(m.digital, Mode::USB_D);
     }
 
@@ -426,12 +432,12 @@ mod tests {
     #[test]
     fn wavelog_mode_standard_passthrough() {
         // Standard modes should come through unchanged.
-        assert_eq!(Mode::LSB.to_wavelog_mode(),  "LSB");
-        assert_eq!(Mode::USB.to_wavelog_mode(),  "USB");
-        assert_eq!(Mode::CW.to_wavelog_mode(),   "CW");
+        assert_eq!(Mode::LSB.to_wavelog_mode(), "LSB");
+        assert_eq!(Mode::USB.to_wavelog_mode(), "USB");
+        assert_eq!(Mode::CW.to_wavelog_mode(), "CW");
         assert_eq!(Mode::RTTY.to_wavelog_mode(), "RTTY");
-        assert_eq!(Mode::FM.to_wavelog_mode(),   "FM");
-        assert_eq!(Mode::AM.to_wavelog_mode(),   "AM");
+        assert_eq!(Mode::FM.to_wavelog_mode(), "FM");
+        assert_eq!(Mode::AM.to_wavelog_mode(), "AM");
     }
 
     #[test]
@@ -444,9 +450,9 @@ mod tests {
     #[test]
     fn wavelog_mode_yaesu_variants() {
         // Yaesu CW/RTTY/DATA variants → standard equivalents.
-        assert_eq!(Mode::CW_U.to_wavelog_mode(),   "CW");
-        assert_eq!(Mode::CW_L.to_wavelog_mode(),   "CW");
-        assert_eq!(Mode::CW_R.to_wavelog_mode(),   "CW");
+        assert_eq!(Mode::CW_U.to_wavelog_mode(), "CW");
+        assert_eq!(Mode::CW_L.to_wavelog_mode(), "CW");
+        assert_eq!(Mode::CW_R.to_wavelog_mode(), "CW");
         assert_eq!(Mode::RTTY_U.to_wavelog_mode(), "RTTY");
         assert_eq!(Mode::RTTY_L.to_wavelog_mode(), "RTTY");
         assert_eq!(Mode::RTTY_R.to_wavelog_mode(), "RTTY");
@@ -456,9 +462,9 @@ mod tests {
 
     #[test]
     fn wavelog_mode_fm_variants() {
-        assert_eq!(Mode::FM_N.to_wavelog_mode(),    "FM");
+        assert_eq!(Mode::FM_N.to_wavelog_mode(), "FM");
         assert_eq!(Mode::DATA_FM.to_wavelog_mode(), "FM");
-        assert_eq!(Mode::DATA_FMN.to_wavelog_mode(),"FM");
+        assert_eq!(Mode::DATA_FMN.to_wavelog_mode(), "FM");
     }
 
     #[test]
@@ -468,9 +474,9 @@ mod tests {
 
     #[test]
     fn wavelog_mode_new_variants() {
-        assert_eq!(Mode::FSK.to_wavelog_mode(),   "RTTY"); // Kenwood FSK = RTTY
-        assert_eq!(Mode::USB_D.to_wavelog_mode(), "USB");  // newer ICOM digital
-        assert_eq!(Mode::DATA.to_wavelog_mode(),  "USB");  // Elecraft data
+        assert_eq!(Mode::FSK.to_wavelog_mode(), "RTTY"); // Kenwood FSK = RTTY
+        assert_eq!(Mode::USB_D.to_wavelog_mode(), "USB"); // newer ICOM digital
+        assert_eq!(Mode::DATA.to_wavelog_mode(), "USB"); // Elecraft data
     }
 
     #[test]

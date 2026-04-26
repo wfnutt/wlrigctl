@@ -42,11 +42,7 @@ async fn upload_live_radio_data(
     settings: &WavelogSettings,
     radio_data: &RadioData,
 ) -> Result<(), Error> {
-    client
-        .post(&settings.url)
-        .json(radio_data)
-        .send()
-        .await?;
+    client.post(&settings.url).json(radio_data).send().await?;
 
     Ok(())
 }
@@ -79,9 +75,10 @@ pub fn wavelog_thread(
     ws_tx: broadcast::Sender<Arc<RadioData>>,
     cat_token: Arc<String>,
 ) {
-    let cat_url = settings.cat_url.as_ref().map(|url| {
-        format!("{}/{}", url.trim_end_matches('/'), cat_token)
-    });
+    let cat_url = settings
+        .cat_url
+        .as_ref()
+        .map(|url| format!("{}/{}", url.trim_end_matches('/'), cat_token));
     let mut radio_data_current = RadioData {
         key: settings.key.clone(),
         radio: settings.identifier.clone(),

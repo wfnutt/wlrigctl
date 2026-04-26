@@ -1,8 +1,8 @@
 use config::{Config, ConfigError, File};
+use home::home_dir;
 use serde_derive::Deserialize;
 use std::env;
 use std::path::PathBuf;
-use home::home_dir;
 
 use crate::cat::CatSettings;
 use crate::flrig::FlrigSettings;
@@ -29,8 +29,8 @@ impl Settings {
     /// e.g. `~/.config/wlrigctl`.  Used by callers that need to store
     /// auxiliary files (WebSocket TLS cert, etc.) alongside the config.
     pub fn config_dir() -> Result<PathBuf, ConfigError> {
-        let home = home_dir()
-            .ok_or_else(|| ConfigError::Message("No home directory found".into()))?;
+        let home =
+            home_dir().ok_or_else(|| ConfigError::Message("No home directory found".into()))?;
         let app_name = env!("CARGO_PKG_NAME");
         let base_dir: PathBuf = match env::var("XDG_CONFIG_HOME") {
             Ok(val) => val.into(),

@@ -73,11 +73,9 @@ fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor>
             let f2 = File::open(key_path)?;
             let rsa = rsa_private_keys(&mut BufReader::new(f2))
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid key PEM"))?;
-            PrivateKey(
-                rsa.into_iter().next().ok_or_else(|| {
-                    io::Error::new(io::ErrorKind::InvalidData, "no private key found in file")
-                })?,
-            )
+            PrivateKey(rsa.into_iter().next().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "no private key found in file")
+            })?)
         }
     };
 
@@ -113,14 +111,17 @@ fn tls_acceptor_from_der(cert_der: Vec<u8>, key_der: Vec<u8>) -> io::Result<TlsA
 /// to avoid the exception entirely should use `mkcert` (see `example.toml`).
 fn persistent_self_signed_acceptor(config_dir: &Path, addr: SocketAddr) -> io::Result<TlsAcceptor> {
     let cert_path = config_dir.join("ws-cert.pem");
-    let key_path  = config_dir.join("ws-key.pem");
+    let key_path = config_dir.join("ws-key.pem");
 
     if cert_path.exists() && key_path.exists() {
         let cert_str = cert_path.to_str().unwrap_or("");
-        let key_str  = key_path.to_str().unwrap_or("");
+        let key_str = key_path.to_str().unwrap_or("");
         match load_tls_acceptor(cert_str, key_str) {
             Ok(a) => {
-                info!("WebSocket TLS: loaded saved certificate from {}", cert_path.display());
+                info!(
+                    "WebSocket TLS: loaded saved certificate from {}",
+                    cert_path.display()
+                );
                 return Ok(a);
             }
             Err(e) => warn!("WebSocket TLS: saved cert/key invalid ({e}), regenerating"),
@@ -128,19 +129,16 @@ fn persistent_self_signed_acceptor(config_dir: &Path, addr: SocketAddr) -> io::R
     }
 
     let sans = vec!["127.0.0.1".to_string(), "localhost".to_string()];
-    let cert = generate_simple_self_signed(sans)
-        .map_err(io::Error::other)?;
+    let cert = generate_simple_self_signed(sans).map_err(io::Error::other)?;
 
-    let cert_der = cert.serialize_der()
-        .map_err(io::Error::other)?;
-    let key_der  = cert.serialize_private_key_der();
-    let cert_pem = cert.serialize_pem()
-        .map_err(io::Error::other)?;
-    let key_pem  = cert.serialize_private_key_pem();
+    let cert_der = cert.serialize_der().map_err(io::Error::other)?;
+    let key_der = cert.serialize_private_key_der();
+    let cert_pem = cert.serialize_pem().map_err(io::Error::other)?;
+    let key_pem = cert.serialize_private_key_pem();
 
     fs::create_dir_all(config_dir)?;
     fs::write(&cert_path, cert_pem)?;
-    fs::write(&key_path,  key_pem)?;
+    fs::write(&key_path, key_pem)?;
     info!(
         "WebSocket TLS: generated self-signed certificate, saved to {}",
         cert_path.display()
@@ -253,24 +251,23 @@ pub fn ws_thread(
     let addr = settings.bind_addr();
 
     let acceptor = match (settings.tls_cert.as_deref(), settings.tls_key.as_deref()) {
-        (Some(cert), Some(key)) => {
-            match load_tls_acceptor(cert, key) {
-                Ok(a) => { info!("WebSocket TLS: loaded cert from {cert}"); a }
-                Err(e) => {
-                    warn!("WebSocket TLS: failed to load cert/key: {e}; WebSocket server disabled");
-                    return;
-                }
+        (Some(cert), Some(key)) => match load_tls_acceptor(cert, key) {
+            Ok(a) => {
+                info!("WebSocket TLS: loaded cert from {cert}");
+                a
             }
-        }
-        (None, None) => {
-            match persistent_self_signed_acceptor(&config_dir, addr) {
-                Ok(a) => a,
-                Err(e) => {
-                    warn!("WebSocket TLS: cert setup failed: {e}; WebSocket server disabled");
-                    return;
-                }
+            Err(e) => {
+                warn!("WebSocket TLS: failed to load cert/key: {e}; WebSocket server disabled");
+                return;
             }
-        }
+        },
+        (None, None) => match persistent_self_signed_acceptor(&config_dir, addr) {
+            Ok(a) => a,
+            Err(e) => {
+                warn!("WebSocket TLS: cert setup failed: {e}; WebSocket server disabled");
+                return;
+            }
+        },
         _ => {
             warn!("WebSocket config: tls_cert and tls_key must both be set or both absent; WebSocket server disabled");
             return;
@@ -384,11 +381,15 @@ mod tests {
 
         // Write garbage files.
         std::fs::write(dir.join("ws-cert.pem"), b"not a cert").unwrap();
-        std::fs::write(dir.join("ws-key.pem"),  b"not a key").unwrap();
+        std::fs::write(dir.join("ws-key.pem"), b"not a key").unwrap();
 
         // Should regenerate rather than fail.
         let result = persistent_self_signed_acceptor(&dir, test_addr());
-        assert!(result.is_ok(), "regeneration after corrupt files failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "regeneration after corrupt files failed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -409,18 +410,18 @@ mod tests {
             "radio":     data.radio,
             "timestamp": 0u64,
         });
-        assert_eq!(msg["type"],      "radio_status");
+        assert_eq!(msg["type"], "radio_status");
         assert_eq!(msg["frequency"], 14074000u64);
-        assert_eq!(msg["mode"],      "USB");
-        assert_eq!(msg["power"],     10.0f64);
-        assert_eq!(msg["radio"],     "IC-703");
+        assert_eq!(msg["mode"], "USB");
+        assert_eq!(msg["power"], 10.0f64);
+        assert_eq!(msg["radio"], "IC-703");
     }
 
     #[test]
     fn radio_status_bad_numeric_fields_produce_zero() {
-        let freq:  u64 = "not-a-number".parse().unwrap_or(0);
+        let freq: u64 = "not-a-number".parse().unwrap_or(0);
         let power: f32 = "??".parse().unwrap_or(0.0);
-        assert_eq!(freq,  0);
+        assert_eq!(freq, 0);
         assert_eq!(power, 0.0);
     }
 }
