@@ -201,7 +201,60 @@ impl Display for WsjtxError {
 
 impl std::error::Error for WsjtxError {}
 
-pub async fn decode_hdr(client: &Client, wavelog_settings: WavelogSettings, buf: &[u8]) -> Result<(), WsjtxError> {
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wavelog::WavelogSettings;
+    use reqwest::Client;
+
+    fn dummy_settings() -> WavelogSettings {
+        WavelogSettings {
+            url: "http://localhost/api/radio".to_string(),
+            qso_url: "http://localhost/api/qso".to_string(),
+            key: "test".to_string(),
+            identifier: "test-rig".to_string(),
+            station_profile_id: 1,
+            interval: 1000,
+            cat_url: None,
+        }
+    }
+
+    // Serialise a WsjtxData packet using the same bincode2 config as the live code.
+    fn make_packet(magic: u32, schema: u32, msg: WsjtxMsg) -> Vec<u8> {
+        bincode2::config()
+            .big_endian()
+            .string_length(U32)
+            .array_length(U32)
+            .serialize(&WsjtxData { magic, schema, msg })
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn decode_hdr_too_short() {
+        let result = decode_hdr(&Client::new(), dummy_settings(), &[0u8; 4]).await;
+        assert!(matches!(result, Err(WsjtxError::DatagramTooShort(_))));
+    }
+
+    #[tokio::test]
+    async fn decode_hdr_bad_magic() {
+        let buf = make_packet(0xDEAD_BEEF, 2, WsjtxMsg::Clear);
+        let result = decode_hdr(&Client::new(), dummy_settings(), &buf).await;
+        assert!(matches!(result, Err(WsjtxError::BadMajick(_))));
+    }
+
+    #[tokio::test]
+    async fn decode_hdr_unsupported_schema() {
+        let buf = make_packet(WSJTX_MAGIC, 3, WsjtxMsg::Clear);
+        let result = decode_hdr(&Client::new(), dummy_settings(), &buf).await;
+        assert!(matches!(result, Err(WsjtxError::UnsupportedSchema(_))));
+    }
+}
+
+pub async fn decode_hdr(
+    client: &Client,
+    wavelog_settings: WavelogSettings,
+    buf: &[u8],
+) -> Result<(), WsjtxError> {
     if buf.len() < SZ_HDR {
         let errmsg = "Datagram too short for WSJTX header".to_string();
         return Err(WsjtxError::DatagramTooShort(errmsg));
@@ -242,14 +295,24 @@ pub async fn decode_hdr(client: &Client, wavelog_settings: WavelogSettings, buf:
     }
 }
 
-async fn rxhandler(client: &Client, wavelog_settings: WavelogSettings, rxdata: &[u8], _src: SocketAddr) {
+async fn rxhandler(
+    client: &Client,
+    wavelog_settings: WavelogSettings,
+    rxdata: &[u8],
+    _src: SocketAddr,
+) {
     match decode_hdr(client, wavelog_settings, rxdata).await {
         Ok(_) => (),
         Err(e) => error!("{}", e),
     }
 }
 
-async fn wsjtx_rxloop(wavelog_settings: WavelogSettings, socket: UdpSocket, err_timeout: u64, token: CancellationToken) {
+async fn wsjtx_rxloop(
+    wavelog_settings: WavelogSettings,
+    socket: UdpSocket,
+    err_timeout: u64,
+    token: CancellationToken,
+) {
     let client = Client::new();
     loop {
         let mut buf = [0; SZ_RXBUF];
@@ -275,13 +338,19 @@ async fn wsjtx_rxloop(wavelog_settings: WavelogSettings, socket: UdpSocket, err_
     }
 }
 
-pub fn wsjtx_thread(wsjtx_settings: WsjtxSettings, wavelog_settings: WavelogSettings, token: CancellationToken) {
+pub fn wsjtx_thread(
+    wsjtx_settings: WsjtxSettings,
+    wavelog_settings: WavelogSettings,
+    token: CancellationToken,
+) {
     let url = format!("{0}:{1}", wsjtx_settings.host, wsjtx_settings.port);
     info!("Listening for WSJT-X QSO logs on: {url}");
     tokio::task::spawn(async move {
         match UdpSocket::bind(&url).await {
             Err(e) => error!("couldn't create socket for WSJTX QSO logging: {e}"),
-            Ok(socket) => wsjtx_rxloop(wavelog_settings, socket, wsjtx_settings.err_timeout, token).await,
+            Ok(socket) => {
+                wsjtx_rxloop(wavelog_settings, socket, wsjtx_settings.err_timeout, token).await
+            }
         }
     });
 }
