@@ -17,7 +17,7 @@ interval = 1000
 
 # When set, wlrigctl includes this URL in every live-radio POST so Wavelog can
 # auto-register the CAT callback.  Set it to the address of wlrigctl's CAT
-# server (the [CAT] host:port below).  Wavelog must be able to reach this URL
+# server (127.0.0.1 and the [CAT] port below).  Wavelog must be able to reach this URL
 # from the machine running the browser.
 # cat_url = "http://127.0.0.1:54321"
 
@@ -41,8 +41,8 @@ cwbandwidth = 1
 
 # This is the reverse direction from wavelog, when a user clicks a callsign on
 # the bandmap and we want to qsy to that frequency.
+# The CAT server always binds to 127.0.0.1 (loopback only).
 [CAT]
-host = "127.0.0.1"
 port = 54321
 
 # FLRig mode strings for this rig.  All three default to ICOM/generic names

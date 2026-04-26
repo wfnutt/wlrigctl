@@ -6,8 +6,10 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use serde_derive::Deserialize;
-use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::net::SocketAddr;
+
+const CAT_BIND_HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
@@ -25,7 +27,6 @@ use crate::{flrig, flrig::Mode, flrig::ModeMap};
 
 #[derive(Debug, Deserialize)]
 pub struct CatSettings {
-    pub host: String,
     pub port: u16,
     /// FLRig mode string to use for CW.  Defaults to "CW" (ICOM/Kenwood/Elecraft).
     /// Set to "CW-U" for Yaesu rigs that require an explicit sideband suffix.
@@ -247,11 +248,7 @@ pub async fn CAT_thread(
     token: CancellationToken,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Listen on TCP socket for someone in Cloudlog/Wavelog clicking the bandmap
-    let cat_ipv4: IpAddr =
-        settings.host.trim().parse().unwrap_or_else(|_| {
-            panic!("Invalid IP address in settings CAT.host: {}", settings.host)
-        });
-    let addr = SocketAddr::from((cat_ipv4, settings.port));
+    let addr = SocketAddr::from((CAT_BIND_HOST, settings.port));
 
     // Build the mode map from config; defaults to ICOM/generic names if fields are absent.
     let mode_map: Arc<ModeMap> = Arc::new(flrig::build_mode_map(
