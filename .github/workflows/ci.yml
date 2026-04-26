@@ -12,9 +12,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: rustup show   # installs toolchain pinned in rust-toolchain.toml
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index
@@ -35,9 +35,9 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: rustup show   # installs toolchain pinned in rust-toolchain.toml
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index
@@ -47,7 +47,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - run: cargo build --release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wlrigctl-${{ github.sha }}
           path: target/release/wlrigctl
@@ -70,7 +70,7 @@ jobs:
     permissions:
       contents: write   # required to create a GitHub Release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Verify tag matches Cargo.toml version
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -79,12 +79,12 @@ jobs:
             echo "::error::Tag v${TAG} does not match Cargo.toml version ${CARGO}"
             exit 1
           fi
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wlrigctl-${{ github.sha }}
           path: target/release/
       - run: chmod +x target/release/wlrigctl
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: cache-cargo-deb
         with:
           path: ~/.cargo/bin/cargo-deb
