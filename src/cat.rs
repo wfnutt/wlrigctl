@@ -25,6 +25,34 @@ use crate::{flrig, flrig::Mode, flrig::ModeMap};
 
 const CAT_BIND_HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
 
+// UK amateur frequency allocations permitted across all licence classes
+// (Foundation as the common baseline), in Hz.
+// Source: Ofcom Amateur Radio Licence Tables A–C, October 2025.
+// Excluded: 472–479 kHz (Full licence only) and the 5 MHz channels
+// (Full licence only, non-contiguous, specialist conditions).
+// Microwave bands above 70cm omitted; add entries here if a supported
+// rig needs them.
+const AMATEUR_BANDS_HZ: &[(u32, u32)] = &[
+    (135_700,     137_800),     // 136 kHz
+    (1_810_000,   2_000_000),   // 160m
+    (3_500_000,   3_800_000),   // 80m
+    (7_000_000,   7_200_000),   // 40m
+    (10_100_000,  10_150_000),  // 30m
+    (14_000_000,  14_350_000),  // 20m
+    (18_068_000,  18_168_000),  // 17m
+    (21_000_000,  21_450_000),  // 15m
+    (24_890_000,  24_990_000),  // 12m
+    (28_000_000,  29_700_000),  // 10m
+    (50_000_000,  52_000_000),  // 6m
+    (70_000_000,  70_500_000),  // 4m
+    (144_000_000, 146_000_000), // 2m
+    (430_000_000, 440_000_000), // 70cm
+];
+
+fn is_amateur_frequency(freq_hz: u32) -> bool {
+    AMATEUR_BANDS_HZ.iter().any(|&(lo, hi)| freq_hz >= lo && freq_hz <= hi)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CatSettings {
     pub port: u16,
@@ -156,6 +184,13 @@ fn parse_qsy_path<B>(req: &Request<B>) -> Result<Qsy, Box<HttpResponse>> {
             "Frequency must be a positive integer",
         ))
     })?;
+
+    if !is_amateur_frequency(freq) {
+        return Err(Box::new(http_err_str(
+            StatusCode::BAD_REQUEST,
+            format!("{freq} Hz is outside permitted UK amateur allocations"),
+        )));
+    }
 
     let mode = parts[1]
         .parse::<WavelogMode>()
@@ -609,18 +644,15 @@ mod tests {
         assert!(parse_qsy_path(&make_get("/14030000/cw/extra")).is_err());
     }
 
-    // --- Out-of-band frequencies (P3 not yet implemented; ignored until allowlist is added) ---
-    // Run `cargo test -- --ignored` to confirm these fail today.
+    // --- Frequency allowlist: out-of-band inputs rejected ---
 
     #[test]
-    #[ignore = "P3: frequency allowlist not yet implemented — currently accepts any u32 Hz value"]
     fn qsy_rejects_zero_frequency() {
         assert!(parse_qsy_path(&make_get("/0/usb")).is_err(),
             "frequency 0 Hz must be rejected");
     }
 
     #[test]
-    #[ignore = "P3: frequency allowlist not yet implemented — currently accepts any u32 Hz value"]
     fn qsy_rejects_broadcast_band_frequency() {
         // 909 kHz is an AM broadcast frequency, not an amateur allocation.
         assert!(parse_qsy_path(&make_get("/909000/usb")).is_err(),
@@ -628,10 +660,66 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P3: frequency allowlist not yet implemented — currently accepts any u32 Hz value"]
     fn qsy_rejects_max_u32_frequency() {
         // 4,294,967,295 Hz (~4.3 GHz) is not an amateur allocation.
         assert!(parse_qsy_path(&make_get("/4294967295/usb")).is_err(),
             "out-of-range frequency 4294967295 Hz must be rejected");
+    }
+
+    #[test]
+    fn qsy_rejects_between_bands() {
+        // 11 MHz falls between 30m (10.15 MHz) and 20m (14.0 MHz).
+        assert!(parse_qsy_path(&make_get("/11000000/usb")).is_err(),
+            "inter-band frequency 11 MHz must be rejected");
+    }
+
+    // --- Frequency allowlist: valid in-band inputs accepted ---
+
+    #[test]
+    fn qsy_accepts_valid_hf_frequencies() {
+        let valid = [
+            "/1840000/usb",   // 160m
+            "/3573000/usb",   // 80m FT8
+            "/7074000/usb",   // 40m FT8
+            "/10136000/usb",  // 30m FT8
+            "/14074000/usb",  // 20m FT8
+            "/18100000/usb",  // 17m FT8
+            "/21074000/usb",  // 15m FT8
+            "/24915000/usb",  // 12m FT8
+            "/28074000/usb",  // 10m FT8
+            "/50313000/usb",  // 6m FT8
+        ];
+        for path in valid {
+            assert!(parse_qsy_path(&make_get(path)).is_ok(),
+                "expected Ok for {path}");
+        }
+    }
+
+    // --- is_amateur_frequency: band edge boundary checks ---
+
+    #[test]
+    fn amateur_frequency_band_edges() {
+        // Lower and upper edges of each band must be accepted (inclusive).
+        for &(lo, hi) in AMATEUR_BANDS_HZ {
+            assert!(is_amateur_frequency(lo), "{lo} Hz (band lower edge) should be accepted");
+            assert!(is_amateur_frequency(hi), "{hi} Hz (band upper edge) should be accepted");
+        }
+    }
+
+    #[test]
+    fn amateur_frequency_outside_all_bands_rejected() {
+        let out_of_band = [
+            0,           // zero
+            100_000,     // below 136 kHz band
+            500_000,     // 500 kHz (between 136 kHz and 160m)
+            472_000,     // 472 kHz (Full-only, excluded by policy)
+            5_000_000,   // 5 MHz (Full-only specialist channels, excluded by policy)
+            11_000_000,  // between 30m and 20m
+            200_000_000, // between 70cm and anything above
+            4_294_967_295, // max u32
+        ];
+        for freq in out_of_band {
+            assert!(!is_amateur_frequency(freq), "{freq} Hz should be rejected");
+        }
     }
 }
