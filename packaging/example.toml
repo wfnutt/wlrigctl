@@ -80,34 +80,33 @@ port = 54321
 # A self-signed TLS certificate is generated automatically on first startup
 # and saved to ~/.config/wlrigctl/ws-cert.pem so it persists across restarts.
 #
-# IMPORTANT — Chrome users: Chrome does not permanently remember the
-# "Proceed" exception for self-signed certificates.  The bypass expires
-# when the browser restarts, so you will be asked again every session.
-# Use mkcert (below) to fix this permanently.
+# BROWSER COMPATIBILITY NOTE
 #
-# Firefox users: the exception is stored permanently on disk.  You will
-# only need to do the setup step once.
+# Firefox (recommended): the one-time certificate exception is stored
+# permanently on disk.  Do the setup step below once and you will never
+# be asked again.
 #
-# One-time browser setup (Firefox, or Chrome before mkcert is installed):
+# Chrome: Chrome does not permanently store self-signed certificate
+# exceptions.  The bypass expires when the browser restarts, so you
+# will need to repeat the setup step every session.  The only tools
+# that fix this (e.g. mkcert) work by installing a root CA into your
+# system trust store, which is a security risk on any machine also used
+# for online banking or other sensitive browsing.  For Chrome users the
+# practical advice is: switch to Firefox for Wavelog.
+#
+# One-time setup (Firefox) / per-session workaround (Chrome):
 #   Visit https://127.0.0.1:54323/ in the browser, click Advanced →
 #   "Proceed to 127.0.0.1 (unsafe)".  After that Wavelog connects silently.
-#
-# Permanent fix for Chrome (and cleaner for Firefox too) — use mkcert:
-#
-#   mkcert -install   # run once; installs a trusted CA into browser trust stores
-#   mkcert -cert-file ~/.config/wlrigctl/ws-cert.pem \
-#          -key-file  ~/.config/wlrigctl/ws-key.pem \
-#          127.0.0.1 localhost
-#   # then set tls_cert and tls_key below and restart wlrigctl
-#   # You will never see a certificate warning again.
 #
 # Override any of the defaults by adding a [websocket] section:
 #
 # [websocket]
 # host = "127.0.0.1"
 # port = 54323
-# tls_cert = "/home/yourname/.config/wlrigctl/ws-cert.pem"
-# tls_key  = "/home/yourname/.config/wlrigctl/ws-key.pem"
+# If you have a certificate for 127.0.0.1 from a CA already trusted by
+# your browser, you can point to it here to avoid the setup step entirely:
+# tls_cert = "/path/to/cert.pem"
+# tls_key  = "/path/to/key.pem"
 
 
 
