@@ -135,7 +135,7 @@ fn http_err_str(status: StatusCode, msg: impl Into<String>) -> HttpResponse {
 }
 
 // Parse '/14030000/cw' into a typed struct: Qsy
-fn parse_qsy_path(req: &Request<Incoming>) -> Result<Qsy, Box<HttpResponse>> {
+fn parse_qsy_path<B>(req: &Request<B>) -> Result<Qsy, Box<HttpResponse>> {
     let parts: Vec<&str> = req
         .uri()
         .path()
@@ -582,5 +582,56 @@ mod tests {
         let m = yaesu_mode_map();
         assert_eq!(wavelog_to_flrig_mode(7_200_000.0,  WavelogMode::Am, &DEFAULT_FT8_FREQS, &m), Mode::AM);
         assert_eq!(wavelog_to_flrig_mode(29_600_000.0, WavelogMode::Fm, &DEFAULT_FT8_FREQS, &m), Mode::FM);
+    }
+
+    //////////////////////////////////////////////////////////////
+    // Tests for parse_qsy_path input validation
+    //////////////////////////////////////////////////////////////
+
+    fn make_get(path: &str) -> Request<()> {
+        Request::builder().uri(path).body(()).unwrap()
+    }
+
+    // --- Malformed paths (already rejected; these pass today) ---
+
+    #[test]
+    fn qsy_path_single_segment_rejected() {
+        assert!(parse_qsy_path(&make_get("/14030000")).is_err());
+    }
+
+    #[test]
+    fn qsy_path_empty_rejected() {
+        assert!(parse_qsy_path(&make_get("/")).is_err());
+    }
+
+    #[test]
+    fn qsy_path_three_segments_rejected() {
+        assert!(parse_qsy_path(&make_get("/14030000/cw/extra")).is_err());
+    }
+
+    // --- Out-of-band frequencies (P3 not yet implemented; ignored until allowlist is added) ---
+    // Run `cargo test -- --ignored` to confirm these fail today.
+
+    #[test]
+    #[ignore = "P3: frequency allowlist not yet implemented — currently accepts any u32 Hz value"]
+    fn qsy_rejects_zero_frequency() {
+        assert!(parse_qsy_path(&make_get("/0/usb")).is_err(),
+            "frequency 0 Hz must be rejected");
+    }
+
+    #[test]
+    #[ignore = "P3: frequency allowlist not yet implemented — currently accepts any u32 Hz value"]
+    fn qsy_rejects_broadcast_band_frequency() {
+        // 909 kHz is an AM broadcast frequency, not an amateur allocation.
+        assert!(parse_qsy_path(&make_get("/909000/usb")).is_err(),
+            "broadcast-band frequency 909 kHz must be rejected");
+    }
+
+    #[test]
+    #[ignore = "P3: frequency allowlist not yet implemented — currently accepts any u32 Hz value"]
+    fn qsy_rejects_max_u32_frequency() {
+        // 4,294,967,295 Hz (~4.3 GHz) is not an amateur allocation.
+        assert!(parse_qsy_path(&make_get("/4294967295/usb")).is_err(),
+            "out-of-range frequency 4294967295 Hz must be rejected");
     }
 }
