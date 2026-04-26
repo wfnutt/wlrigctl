@@ -25,6 +25,15 @@ use crate::{flrig, flrig::Mode, flrig::ModeMap};
 
 const CAT_BIND_HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
 
+pub fn generate_cat_token() -> String {
+    use std::io::Read;
+    let mut bytes = [0u8; 16];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .expect("Failed to read from /dev/urandom — cannot generate CAT token");
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 // UK amateur frequency allocations permitted across all licence classes
 // (Foundation as the common baseline), in Hz.
 // Source: Ofcom Amateur Radio Licence Tables A–C, October 2025.
@@ -162,8 +171,8 @@ fn http_err_str(status: StatusCode, msg: impl Into<String>) -> HttpResponse {
     }
 }
 
-// Parse '/14030000/cw' into a typed struct: Qsy
-fn parse_qsy_path<B>(req: &Request<B>) -> Result<Qsy, Box<HttpResponse>> {
+// Parse '/<cat_token>/<freq>/<mode>' into a typed struct: Qsy
+fn parse_qsy_path<B>(req: &Request<B>, cat_token: &str) -> Result<Qsy, Box<HttpResponse>> {
     let parts: Vec<&str> = req
         .uri()
         .path()
@@ -171,14 +180,21 @@ fn parse_qsy_path<B>(req: &Request<B>) -> Result<Qsy, Box<HttpResponse>> {
         .split('/')
         .collect();
 
-    if parts.len() != 2 {
+    if parts.len() != 3 {
         return Err(Box::new(http_err_str(
             StatusCode::BAD_REQUEST,
-            "Expected /<freq>/<mode>",
+            "Expected /<token>/<freq>/<mode>",
         )));
     }
 
-    let freq: u32 = parts[0].parse::<u32>().map_err(|_| {
+    if parts[0] != cat_token {
+        return Err(Box::new(http_err_str(
+            StatusCode::UNAUTHORIZED,
+            "Invalid token",
+        )));
+    }
+
+    let freq: u32 = parts[1].parse::<u32>().map_err(|_| {
         Box::new(http_err_str(
             StatusCode::BAD_REQUEST,
             "Frequency must be a positive integer",
@@ -192,7 +208,7 @@ fn parse_qsy_path<B>(req: &Request<B>) -> Result<Qsy, Box<HttpResponse>> {
         )));
     }
 
-    let mode = parts[1]
+    let mode = parts[2]
         .parse::<WavelogMode>()
         .map_err(|_| Box::new(http_err_str(StatusCode::BAD_REQUEST, "Invalid mode")))?;
     Ok(Qsy {
@@ -230,10 +246,11 @@ async fn qsy(
     req: Request<hyper::body::Incoming>,
     mode_map: Arc<ModeMap>,
     ft8_freqs: Arc<[f64]>,
+    cat_token: Arc<String>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    info!("qsy() called with: {}", &req.uri().path());
+    info!("qsy() called");
 
-    let qsyinfo = match parse_qsy_path(&req) {
+    let qsyinfo = match parse_qsy_path(&req, &cat_token) {
         Err(e) => return Ok(*e), // Infallible
         Ok(q) => q,
     };
@@ -281,6 +298,7 @@ pub async fn CAT_thread(
     settings: CatSettings,
     rig: &Arc<flrig::FLRig>,
     token: CancellationToken,
+    cat_token: Arc<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Listen on TCP socket for someone in Cloudlog/Wavelog clicking the bandmap
     let addr = SocketAddr::from((CAT_BIND_HOST, settings.port));
@@ -315,12 +333,13 @@ pub async fn CAT_thread(
         let rig_for_qsy = rig.clone();
         let mode_map_for_qsy = mode_map.clone();
         let ft8_freqs_for_qsy = ft8_freqs.clone();
+        let cat_token_for_qsy = cat_token.clone();
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .half_close(true)
                 .serve_connection(
                     io,
-                    service_fn(move |req| qsy(rig_for_qsy.clone(), req, mode_map_for_qsy.clone(), ft8_freqs_for_qsy.clone())),
+                    service_fn(move |req| qsy(rig_for_qsy.clone(), req, mode_map_for_qsy.clone(), ft8_freqs_for_qsy.clone(), cat_token_for_qsy.clone())),
                 )
                 .await
             {
@@ -623,53 +642,72 @@ mod tests {
     // Tests for parse_qsy_path input validation
     //////////////////////////////////////////////////////////////
 
+    const TEST_TOKEN: &str = "testtoken";
+
     fn make_get(path: &str) -> Request<()> {
-        Request::builder().uri(path).body(()).unwrap()
+        Request::builder()
+            .uri(format!("/{TEST_TOKEN}{path}"))
+            .body(())
+            .unwrap()
     }
 
-    // --- Malformed paths (already rejected; these pass today) ---
+    // --- Malformed paths ---
 
     #[test]
     fn qsy_path_single_segment_rejected() {
-        assert!(parse_qsy_path(&make_get("/14030000")).is_err());
+        // No token or freq/mode at all.
+        let req = Request::builder().uri("/14030000").body(()).unwrap();
+        assert!(parse_qsy_path(&req, TEST_TOKEN).is_err());
     }
 
     #[test]
     fn qsy_path_empty_rejected() {
-        assert!(parse_qsy_path(&make_get("/")).is_err());
+        let req = Request::builder().uri("/").body(()).unwrap();
+        assert!(parse_qsy_path(&req, TEST_TOKEN).is_err());
     }
 
     #[test]
-    fn qsy_path_three_segments_rejected() {
-        assert!(parse_qsy_path(&make_get("/14030000/cw/extra")).is_err());
+    fn qsy_path_four_segments_rejected() {
+        assert!(parse_qsy_path(&make_get("/14030000/cw/extra"), TEST_TOKEN).is_err());
+    }
+
+    // --- Token check ---
+
+    #[test]
+    fn qsy_wrong_token_rejected() {
+        let req = Request::builder()
+            .uri("/wrongtoken/14074000/usb")
+            .body(())
+            .unwrap();
+        assert!(parse_qsy_path(&req, TEST_TOKEN).is_err());
     }
 
     // --- Frequency allowlist: out-of-band inputs rejected ---
 
     #[test]
     fn qsy_rejects_zero_frequency() {
-        assert!(parse_qsy_path(&make_get("/0/usb")).is_err(),
+        assert!(parse_qsy_path(&make_get("/0/usb"), TEST_TOKEN).is_err(),
             "frequency 0 Hz must be rejected");
     }
 
     #[test]
     fn qsy_rejects_broadcast_band_frequency() {
         // 909 kHz is an AM broadcast frequency, not an amateur allocation.
-        assert!(parse_qsy_path(&make_get("/909000/usb")).is_err(),
+        assert!(parse_qsy_path(&make_get("/909000/usb"), TEST_TOKEN).is_err(),
             "broadcast-band frequency 909 kHz must be rejected");
     }
 
     #[test]
     fn qsy_rejects_max_u32_frequency() {
         // 4,294,967,295 Hz (~4.3 GHz) is not an amateur allocation.
-        assert!(parse_qsy_path(&make_get("/4294967295/usb")).is_err(),
+        assert!(parse_qsy_path(&make_get("/4294967295/usb"), TEST_TOKEN).is_err(),
             "out-of-range frequency 4294967295 Hz must be rejected");
     }
 
     #[test]
     fn qsy_rejects_between_bands() {
         // 11 MHz falls between 30m (10.15 MHz) and 20m (14.0 MHz).
-        assert!(parse_qsy_path(&make_get("/11000000/usb")).is_err(),
+        assert!(parse_qsy_path(&make_get("/11000000/usb"), TEST_TOKEN).is_err(),
             "inter-band frequency 11 MHz must be rejected");
     }
 
@@ -690,7 +728,7 @@ mod tests {
             "/50313000/usb",  // 6m FT8
         ];
         for path in valid {
-            assert!(parse_qsy_path(&make_get(path)).is_ok(),
+            assert!(parse_qsy_path(&make_get(path), TEST_TOKEN).is_ok(),
                 "expected Ok for {path}");
         }
     }

@@ -12,7 +12,7 @@ use log::info;
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
-use crate::cat::CAT_thread;
+use crate::cat::{CAT_thread, generate_cat_token};
 use crate::settings::Settings;
 use crate::wavelog::wavelog_thread;
 use crate::ws::ws_thread;
@@ -51,13 +51,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let rig = Arc::new(flrig::FLRig::new(settings.flrig, radio_id));
 
     let token = CancellationToken::new();
+    let cat_token = Arc::new(generate_cat_token());
 
     // Channel for streaming live radio state to WebSocket clients.
     // Capacity 4: clients that fall behind are dropped without blocking the poll loop.
     let (ws_tx, _) = broadcast::channel::<Arc<wavelog::RadioData>>(4);
 
     // polling of FLRig frequency. Issue http requests to wavelog to update live frequency
-    wavelog_thread(settings.wavelog.clone(), rig.clone(), token.clone(), ws_tx.clone());
+    wavelog_thread(settings.wavelog.clone(), rig.clone(), token.clone(), ws_tx.clone(), cat_token.clone());
 
     // Separate thread for someone logging from WSJTX via UDP on port 2237
     wsjtx_thread(settings.wsjtx, settings.wavelog, token.clone());
@@ -70,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Keep the current thread for CAT control requests from Wavelog
     // We gateway these requests back to FLRig after a little bit of massaging
     tokio::select! {
-        result = CAT_thread(settings.cat, &rig, token.clone()) => result,
+        result = CAT_thread(settings.cat, &rig, token.clone(), cat_token.clone()) => result,
         _ = shutdown_signal() => {
             info!("Shutdown signal received, stopping tasks");
             token.cancel();
