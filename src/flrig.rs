@@ -490,4 +490,59 @@ mod tests {
         let watts: f32 = rig_power_watts(50, 100, 100).parse().unwrap();
         assert_eq!(watts, 50.0);
     }
+
+    #[test]
+    fn rig_power_zero_power_returns_zero() {
+        assert_eq!(rig_power_watts(0, 100, 100), "0");
+    }
+
+    #[test]
+    fn rig_power_result_is_always_integer() {
+        // Wavelog requires integer Watts; the string must never contain a decimal point.
+        let cases = [(1, 3, 100), (2, 3, 100), (1, 7, 100), (33, 64, 100)];
+        for (power, max_power, max_watts) in cases {
+            let result = rig_power_watts(power, max_power, max_watts);
+            assert!(
+                !result.contains('.'),
+                "expected integer string, got '{result}' for ({power}, {max_power}, {max_watts})"
+            );
+        }
+    }
+
+    #[test]
+    fn rig_power_fractional_watts_are_rounded() {
+        // 1/3 * 100 = 33.333... → 33
+        assert_eq!(rig_power_watts(1, 3, 100), "33");
+        // 2/3 * 100 = 66.666... → 67
+        assert_eq!(rig_power_watts(2, 3, 100), "67");
+    }
+
+    #[test]
+    fn rig_power_half_watt_rounds_up() {
+        // f32::round() is half-away-from-zero: 0.5 → 1
+        assert_eq!(rig_power_watts(1, 2, 1), "1");
+    }
+
+    #[test]
+    fn rig_power_scaled_max_watts() {
+        // 200 W rig at 50% → 100 W
+        assert_eq!(rig_power_watts(50, 100, 200), "100");
+        // 1500 W rig at 75% → 1125 W
+        assert_eq!(rig_power_watts(75, 100, 1500), "1125");
+    }
+
+    #[test]
+    fn rig_power_max_power_not_100() {
+        // FLRig reports maxpwr=80 (some rigs use a different scale).
+        // 50 * 100 / 80 = 62.5 → rounds to 63 W.
+        assert_eq!(rig_power_watts(50, 80, 100), "63");
+    }
+
+    #[test]
+    fn rig_power_full_power_equals_max_watts() {
+        // When power == max_power the result must equal max_watts, regardless of scale.
+        assert_eq!(rig_power_watts(100, 100, 100), "100");
+        assert_eq!(rig_power_watts(80, 80, 100), "100");
+        assert_eq!(rig_power_watts(255, 255, 50), "50");
+    }
 }
