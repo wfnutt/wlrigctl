@@ -18,7 +18,11 @@ pub struct WsjtxSettings {
     pub err_timeout: u64,
 }
 
-const SZ_RXBUF: usize = 1500; // close enough for a typical Ethernet MTU
+// Maximum unfragmented UDP payload over Ethernet is 1472 bytes
+// (1500-byte L2 frame minus 20-byte IPv4 header minus 8-byte UDP header).
+// 1500 comfortably exceeds that.  WSJT-X LoggedADIF packets are well under
+// 1000 bytes in practice, so this is ample.
+const SZ_RXBUF: usize = 1500;
 const WSJTX_MAGIC: u32 = 0xadbccbda;
 const SZ_HDR: usize = 12; // bytes of initial header
 
@@ -314,8 +318,8 @@ async fn wsjtx_rxloop(
     token: CancellationToken,
 ) {
     let client = Client::new();
+    let mut buf = vec![0u8; SZ_RXBUF];
     loop {
-        let mut buf = [0; SZ_RXBUF];
 
         tokio::select! {
             _ = token.cancelled() => {
