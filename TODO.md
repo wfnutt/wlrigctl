@@ -7,10 +7,9 @@ See CLAUDE.md for design decisions and known quirks.
 
 ## Dependency maintenance
 
-- **Upgrade reqwest 0.11 → 0.12** (`reqwest` is pinned at 0.11.22 because
-  `dxr_client 0.7.1` pins it; watch for a `dxr_client` release that supports
-  0.12).  Pulling in 0.12 also resolves the trailing TLS-stack lag:
-  `rustls 0.21 → 0.23`, `tokio-rustls 0.24 → 0.26`, `rustls-pemfile 1 → 2`.
+- **Unify reqwest versions** — we use reqwest 0.13; `dxr_client 0.7.1` pins
+  reqwest 0.12, so both are compiled.  Watch for a `dxr_client` release that
+  supports 0.13 (or consider whether we can vendor/patch it).
 
 - ~~**Add `cargo audit` to CI**~~ — done; separate `audit` job runs in parallel
   with `test`; `build` will not proceed if audit fails.
@@ -75,9 +74,9 @@ See CLAUDE.md for design decisions and known quirks.
 ## Upstream / packaging
 
 - **Consider adding `cargo deny`** — `cargo deny check` enforces licence
-  compatibility and duplicate-crate detection.  Useful given the number of
-  transitive dependencies (`quick-xml` is pulled in twice at different versions
-  by `config` and `dxr_client`).
+  compatibility and duplicate-crate detection.  The remaining duplicate is
+  reqwest 0.12/0.13 (dxr\_client vs ours); `cargo deny` would catch any
+  future regressions.
 
 - **Pi cross-compilation in CI** — `aarch64-unknown-linux-gnu` is present in
   `.cargo/config.toml` but not built in CI.  If BADARC ever deploys on a Pi,
