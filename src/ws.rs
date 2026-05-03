@@ -112,12 +112,12 @@ fn persistent_self_signed_acceptor(config_dir: &Path, addr: SocketAddr) -> io::R
     }
 
     let sans = vec!["127.0.0.1".to_string(), "localhost".to_string()];
-    let cert = generate_simple_self_signed(sans).map_err(io::Error::other)?;
+    let certified = generate_simple_self_signed(sans).map_err(io::Error::other)?;
 
-    let cert_der = cert.serialize_der().map_err(io::Error::other)?;
-    let key_der = cert.serialize_private_key_der();
-    let cert_pem = cert.serialize_pem().map_err(io::Error::other)?;
-    let key_pem = cert.serialize_private_key_pem();
+    let cert_der = certified.cert.der().to_vec();
+    let key_der = certified.signing_key.serialize_der();
+    let cert_pem = certified.cert.pem();
+    let key_pem = certified.signing_key.serialize_pem();
 
     fs::create_dir_all(config_dir)?;
     fs::write(&cert_path, cert_pem)?;
@@ -158,7 +158,7 @@ fn radio_status_msg(data: &RadioData) -> Message {
                         .map(|d| d.as_millis())
                         .unwrap_or(0),
     });
-    Message::Text(msg.to_string())
+    Message::Text(msg.to_string().into())
 }
 
 async fn handle_client(
