@@ -13,7 +13,7 @@ identifier = "my-radio-model"
 # descriptions. Most users will need 1 here.
 station_profile_id = 1
 # interval is in milliseconds
-interval = 1000
+interval = 200
 
 # When set, wlrigctl includes this URL in every live-radio POST so Wavelog can
 # auto-register the CAT callback.  Set it to the address of wlrigctl's CAT
