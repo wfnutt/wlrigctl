@@ -57,12 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (ws_tx, ws_rx) = watch::channel::<Option<Arc<wavelog::RadioData>>>(None);
 
     // polling of FLRig frequency. Issue http requests to wavelog to update live frequency
-    wavelog_thread(
-        settings.wavelog.clone(),
-        rig.clone(),
-        token.clone(),
-        ws_tx,
-    );
+    wavelog_thread(settings.wavelog.clone(), rig.clone(), token.clone(), ws_tx);
 
     // Separate thread for someone logging from WSJTX via UDP on port 2237
     wsjtx_thread(settings.wsjtx, settings.wavelog, token.clone());

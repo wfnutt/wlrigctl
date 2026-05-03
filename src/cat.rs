@@ -176,10 +176,7 @@ fn http_err_str(status: StatusCode, msg: impl Into<String>) -> HttpResponse {
 // reliably blocks cross-origin browser CSRF.  Local non-browser processes
 // can forge any header, so this is not a defence against them.
 fn check_origin<B>(req: &Request<B>, expected: &str) -> bool {
-    req.headers()
-        .get("origin")
-        .and_then(|v| v.to_str().ok())
-        == Some(expected)
+    req.headers().get("origin").and_then(|v| v.to_str().ok()) == Some(expected)
 }
 
 // Parse '/<freq>/<mode>' into a typed struct: Qsy
@@ -1053,10 +1050,7 @@ mod tests {
 
     #[test]
     fn origin_missing_rejected() {
-        let req = Request::builder()
-            .uri("/14074000/usb")
-            .body(())
-            .unwrap();
+        let req = Request::builder().uri("/14074000/usb").body(()).unwrap();
         assert!(!check_origin(&req, "https://wavelog.example.org"));
     }
 }

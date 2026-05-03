@@ -470,6 +470,9 @@ mod tests {
     fn watch_channel_none_initial_value_when_no_rig_data_yet() {
         let (_tx, mut rx) = watch::channel::<Option<Arc<RadioData>>>(None);
         let initial = rx.borrow_and_update().clone();
-        assert!(initial.is_none(), "initial value should be None before first rig poll");
+        assert!(
+            initial.is_none(),
+            "initial value should be None before first rig poll"
+        );
     }
 }

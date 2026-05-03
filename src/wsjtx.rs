@@ -320,7 +320,6 @@ async fn wsjtx_rxloop(
     let client = Client::new();
     let mut buf = vec![0u8; SZ_RXBUF];
     loop {
-
         tokio::select! {
             _ = token.cancelled() => {
                 info!("wsjtx thread shutting down");

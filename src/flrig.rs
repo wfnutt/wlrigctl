@@ -421,7 +421,14 @@ mod tests {
 
     #[test]
     fn cw_narrow_index_returns_none_for_non_cw_modes() {
-        for mode in [Mode::USB, Mode::LSB, Mode::RTTY, Mode::FM, Mode::AM, Mode::D_USB] {
+        for mode in [
+            Mode::USB,
+            Mode::LSB,
+            Mode::RTTY,
+            Mode::FM,
+            Mode::AM,
+            Mode::D_USB,
+        ] {
             assert_eq!(
                 cw_narrow_index(mode, Some(1)),
                 None,
