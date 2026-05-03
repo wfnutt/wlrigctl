@@ -23,30 +23,6 @@ to each new client on connect.
 Config lives at `~/.config/wlrigctl/config.toml` (XDG-aware).
 Runs as a systemd user service (`systemctl --user`).
 
-## Building and packaging
-
-```sh
-cargo build --release          # development
-cargo deb                      # produces target/debian/wlrigctl_*.deb
-```
-
-`cargo deb` requires `cargo install cargo-deb` first.
-The .deb installs the binary, a systemd user service, and an example config.
-Targets x86_64 and aarch64 (cross-compilation works).
-
-## Cutting a release
-
-1. Bump `version` in `Cargo.toml` and commit
-2. Push a matching tag:
-
-```sh
-git tag v0.5.0 && git push origin v0.5.0
-```
-
-GitHub Actions picks up the tag, runs the full test suite, and attaches the
-`.deb` to a GitHub Release.  The CI pipeline validates that the tag version
-matches `Cargo.toml` and will fail fast if they diverge.
-
 ## Known quirks and non-obvious design decisions
 
 ### Wavelog drops the TCP connection before the response arrives (cat.rs)
@@ -177,13 +153,3 @@ the Wavelog admin panel.
 | `futures-util` | `SinkExt`/`StreamExt` traits needed by tungstenite async API |
 | `quick-xml` | Pulled in transitively; not used directly |
 
-## Logging
-
-The service has no output in normal operation. Enable logging via the systemd
-unit's commented-out `Environment=` lines, or when running manually:
-
-```sh
-RUST_LOG=debug wlrigctl          # verbose
-RUST_LOG=wlrigctl=debug wlrigctl # verbose, suppress dependency noise
-RUST_LOG=info wlrigctl           # startup banners and mode changes only
-```

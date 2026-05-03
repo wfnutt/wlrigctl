@@ -76,9 +76,46 @@ $ cargo deb
 
 ## Configuring
 
-_Edit ~/.config/wlrigctl/config.toml as you wish_
+Copy the installed example and open it in your editor:
 
-(you'll need to insert a Wavelog API key that you must generate for yourself)
+```
+$ cp /usr/share/wlrigctl/example.toml ~/.config/wlrigctl/config.toml
+$ $EDITOR ~/.config/wlrigctl/config.toml
+```
+
+Key settings:
+
+**`[wavelog]`**
+- `url` — your Wavelog instance URL; must end with `/index.php/api/radio`
+- `key` — API key generated in the Wavelog admin panel under *Station → API Keys*
+- `identifier` — short label for this station (shown in Wavelog's radio list)
+- `station_profile_id` — station profile index; most users need `1`
+- `cat_url` — set to `http://127.0.0.1:54321` so Wavelog auto-registers the CAT
+  callback; without it the bandmap QSY button requires manual admin configuration
+
+**`[flrig]`**
+- `host` / `port` — address of your running FLRig instance (default: `http://127.0.0.1:12345`)
+- `maxpower` — rig's maximum power in watts; FLRig reports power as 0–100% and
+  this scales it to an absolute wattage for Wavelog
+
+**`[CAT]`** *(optional — needed for bandmap QSY)*
+- `port` — TCP port the CAT server listens on (default `54321`)
+- `cw_mode` / `rtty_mode` / `digital_mode` — FLRig mode strings for your rig;
+  defaults work for ICOM; see `example.toml` for Yaesu, Kenwood, Elecraft variants
+- `wavelog_origin` — if Wavelog is served over HTTPS, set this to your Wavelog
+  URL origin to guard against CSRF; see `example.toml` for details
+
+**`[WSJTX]`** *(optional — needed for WSJT-X QSO capture)*
+- `host` / `port` — bind address for the WSJT-X UDP listener (default `127.0.0.1:2237`);
+  must match the UDP destination configured in WSJT-X settings
+
+> **Note:** The section names `[CAT]` and `[WSJTX]` must be uppercase in your
+> config file.  Lowercase `[cat]` or `[wsjtx]` will silently fail to load.
+
+> **UK deployments:** The CAT server enforces UK Ofcom amateur band allocations
+> (Foundation licence, Tables A–C) and rejects any QSY to a frequency outside
+> those ranges.  Deploying outside the UK requires editing `AMATEUR_BANDS_HZ` in
+> `src/cat.rs` and recompiling.
 
 ## Enabling/Starting
 
@@ -87,6 +124,24 @@ These are one-off operations.
 ```
 $ systemctl --user daemon-reload
 $ systemctl --user enable --now wlrigctl.service
+```
+
+## Debugging
+
+The service produces no output in normal operation.  To enable logging, set
+`RUST_LOG` before starting it:
+
+```
+$ RUST_LOG=info wlrigctl            # startup banners and mode changes only
+$ RUST_LOG=wlrigctl=debug wlrigctl  # verbose, suppresses dependency library noise
+$ RUST_LOG=debug wlrigctl           # very verbose including all dependencies
+```
+
+When running as a systemd service, uncomment the `Environment=` line in the
+unit file:
+
+```
+$ systemctl --user edit wlrigctl.service
 ```
 
 ## WebSocket browser setup (one-time per Chrome restart)
