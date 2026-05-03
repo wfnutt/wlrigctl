@@ -179,7 +179,7 @@ fn check_origin<B>(req: &Request<B>, expected: &str) -> bool {
     req.headers()
         .get("origin")
         .and_then(|v| v.to_str().ok())
-        .map_or(false, |o| o == expected)
+        == Some(expected)
 }
 
 // Parse '/<freq>/<mode>' into a typed struct: Qsy

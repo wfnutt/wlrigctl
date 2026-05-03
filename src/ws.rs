@@ -12,7 +12,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::broadcast;
+use tokio::sync::watch;
 use tokio_rustls::TlsAcceptor;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
@@ -163,10 +163,25 @@ fn persistent_self_signed_acceptor(config_dir: &Path, addr: SocketAddr) -> io::R
 
 // ── Per-client handler ────────────────────────────────────────────────────────
 
+fn radio_status_msg(data: &RadioData) -> Message {
+    let msg = json!({
+        "type":      "radio_status",
+        "frequency": data.frequency.parse::<u64>().unwrap_or(0),
+        "mode":      data.mode,
+        "power":     data.power.parse::<f32>().unwrap_or(0.0),
+        "radio":     data.radio,
+        "timestamp": std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis())
+                        .unwrap_or(0),
+    });
+    Message::Text(msg.to_string())
+}
+
 async fn handle_client(
     stream: TcpStream,
     peer: SocketAddr,
-    mut rx: broadcast::Receiver<Arc<RadioData>>,
+    mut rx: watch::Receiver<Option<Arc<RadioData>>>,
     token: CancellationToken,
     acceptor: TlsAcceptor,
 ) {
@@ -189,6 +204,16 @@ async fn handle_client(
 
     let (mut sink, mut source) = ws_stream.split();
 
+    // Push current rig state immediately on connect so the client does not
+    // have to wait for the next poll cycle to see anything.
+    let initial = rx.borrow_and_update().clone();
+    if let Some(ref data) = initial {
+        if sink.send(radio_status_msg(data)).await.is_err() {
+            info!("WebSocket client disconnected: {peer}");
+            return;
+        }
+    }
+
     loop {
         tokio::select! {
             _ = token.cancelled() => {
@@ -204,27 +229,15 @@ async fn handle_client(
                     Some(Ok(_)) => {}
                 }
             }
-            update = rx.recv() => {
-                let data = match update {
-                    Ok(d) => d,
-                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                        warn!("WebSocket client {peer} lagged by {n} messages");
-                        continue;
-                    }
-                    Err(broadcast::error::RecvError::Closed) => break,
+            result = rx.changed() => {
+                if result.is_err() {
+                    break; // sender dropped (daemon shutting down)
+                }
+                let data = match rx.borrow_and_update().clone() {
+                    Some(d) => d,
+                    None => continue,
                 };
-                let msg = json!({
-                    "type":      "radio_status",
-                    "frequency": data.frequency.parse::<u64>().unwrap_or(0),
-                    "mode":      data.mode,
-                    "power":     data.power.parse::<f32>().unwrap_or(0.0),
-                    "radio":     data.radio,
-                    "timestamp": std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .map(|d| d.as_millis())
-                                    .unwrap_or(0),
-                });
-                if sink.send(Message::Text(msg.to_string())).await.is_err() {
+                if sink.send(radio_status_msg(&data)).await.is_err() {
                     debug!("WebSocket send to {peer} failed; closing");
                     break;
                 }
@@ -245,7 +258,7 @@ async fn handle_client(
 pub fn ws_thread(
     settings: WsSettings,
     config_dir: PathBuf,
-    ws_tx: broadcast::Sender<Arc<RadioData>>,
+    ws_rx: watch::Receiver<Option<Arc<RadioData>>>,
     token: CancellationToken,
 ) {
     let addr = settings.bind_addr();
@@ -296,7 +309,7 @@ pub fn ws_thread(
                     match result {
                         Err(e) => { warn!("WebSocket accept error: {e}"); }
                         Ok((stream, peer)) => {
-                            let rx = ws_tx.subscribe();
+                            let rx = ws_rx.clone();
                             tokio::task::spawn(handle_client(
                                 stream,
                                 peer,
@@ -402,26 +415,61 @@ mod tests {
             power: "10".to_string(),
             cat_url: None,
         };
-        let msg = json!({
-            "type":      "radio_status",
-            "frequency": data.frequency.parse::<u64>().unwrap_or(0),
-            "mode":      data.mode,
-            "power":     data.power.parse::<f32>().unwrap_or(0.0),
-            "radio":     data.radio,
-            "timestamp": 0u64,
-        });
-        assert_eq!(msg["type"], "radio_status");
-        assert_eq!(msg["frequency"], 14074000u64);
-        assert_eq!(msg["mode"], "USB");
-        assert_eq!(msg["power"], 10.0f64);
-        assert_eq!(msg["radio"], "IC-703");
+        let msg = radio_status_msg(&data);
+        let json: serde_json::Value = match msg {
+            Message::Text(s) => serde_json::from_str(&s).unwrap(),
+            _ => panic!("expected Text message"),
+        };
+        assert_eq!(json["type"], "radio_status");
+        assert_eq!(json["frequency"], 14074000u64);
+        assert_eq!(json["mode"], "USB");
+        assert_eq!(json["power"], 10.0f64);
+        assert_eq!(json["radio"], "IC-703");
+        assert!(json["timestamp"].as_u64().is_some());
     }
 
     #[test]
     fn radio_status_bad_numeric_fields_produce_zero() {
-        let freq: u64 = "not-a-number".parse().unwrap_or(0);
-        let power: f32 = "??".parse().unwrap_or(0.0);
-        assert_eq!(freq, 0);
-        assert_eq!(power, 0.0);
+        let data = RadioData {
+            key: "k".to_string(),
+            radio: "test".to_string(),
+            frequency: "not-a-number".to_string(),
+            mode: "USB".to_string(),
+            power: "??".to_string(),
+            cat_url: None,
+        };
+        let msg = radio_status_msg(&data);
+        let json: serde_json::Value = match msg {
+            Message::Text(s) => serde_json::from_str(&s).unwrap(),
+            _ => panic!("expected Text message"),
+        };
+        assert_eq!(json["frequency"], 0u64);
+        assert_eq!(json["power"], 0.0f64);
+    }
+
+    #[test]
+    fn watch_channel_initial_value_available_before_change() {
+        // Verify that a newly subscribed watch::Receiver can read the current
+        // value immediately via borrow_and_update() without waiting for changed().
+        let data = Arc::new(RadioData {
+            key: "k".to_string(),
+            radio: "IC-703".to_string(),
+            frequency: "14074000".to_string(),
+            mode: "USB".to_string(),
+            power: "5".to_string(),
+            cat_url: None,
+        });
+        let (tx, mut rx) = watch::channel::<Option<Arc<RadioData>>>(Some(data.clone()));
+        let initial = rx.borrow_and_update().clone();
+        assert!(initial.is_some());
+        assert_eq!(initial.unwrap().frequency, "14074000");
+        drop(tx);
+    }
+
+    #[test]
+    fn watch_channel_none_initial_value_when_no_rig_data_yet() {
+        let (_tx, mut rx) = watch::channel::<Option<Arc<RadioData>>>(None);
+        let initial = rx.borrow_and_update().clone();
+        assert!(initial.is_none(), "initial value should be None before first rig poll");
     }
 }

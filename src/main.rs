@@ -9,7 +9,7 @@ use std::process;
 use std::sync::Arc;
 
 use log::info;
-use tokio::sync::broadcast;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use crate::cat::CAT_thread;
@@ -52,16 +52,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let token = CancellationToken::new();
 
-    // Channel for streaming live radio state to WebSocket clients.
-    // Capacity 4: clients that fall behind are dropped without blocking the poll loop.
-    let (ws_tx, _) = broadcast::channel::<Arc<wavelog::RadioData>>(4);
+    // Watch channel for streaming live radio state to WebSocket clients.
+    // watch holds the latest value; new subscribers receive it immediately on connect.
+    let (ws_tx, ws_rx) = watch::channel::<Option<Arc<wavelog::RadioData>>>(None);
 
     // polling of FLRig frequency. Issue http requests to wavelog to update live frequency
     wavelog_thread(
         settings.wavelog.clone(),
         rig.clone(),
         token.clone(),
-        ws_tx.clone(),
+        ws_tx,
     );
 
     // Separate thread for someone logging from WSJTX via UDP on port 2237
@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // WebSocket server: push live rig state to browser clients.
     // Always started; [websocket] section in config.toml is optional.
     let config_dir = Settings::config_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    ws_thread(settings.websocket, config_dir, ws_tx.clone(), token.clone());
+    ws_thread(settings.websocket, config_dir, ws_rx, token.clone());
 
     // Keep the current thread for CAT control requests from Wavelog
     // We gateway these requests back to FLRig after a little bit of massaging
