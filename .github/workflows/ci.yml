@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read   # safe default; package job overrides to write for releases
+
 jobs:
 
   # ── Test ──────────────────────────────────────────────────────────────────
