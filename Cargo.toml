@@ -10,12 +10,12 @@ Based upon earlier work on clrigctl, by Martin Brodbeck, DG2SMB.
 """
 
 [dependencies]
-config = { version = "0.13.4", features = ["toml"] }
+config = { version = "0.15.22", features = ["toml"] }
 env_logger = "0.10.1"
 home = "0.5.5"
 log = "0.4.20"
 quick-xml = { version = "0.31.0", features = ["serde", "serialize"] }
-reqwest = { version = "0.11.22", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13.3", default-features = false, features = ["json", "rustls"] }
 serde = { version = "1.0.193", features = ["serde_derive"] }
 serde_derive = "1.0.193"
 hyper = { version = "1", features = ["full"] }
@@ -31,9 +31,9 @@ tokio-util = { version = "0.7" }
 tokio-tungstenite = "0.21"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 rcgen = "0.12"
-rustls = "0.21"
-rustls-pemfile = "1"
-tokio-rustls = "0.24"
+rustls = "0.23"
+rustls-pki-types = "1.14"
+tokio-rustls = "0.26"
 
 [profile.release]
 strip = "symbols"
