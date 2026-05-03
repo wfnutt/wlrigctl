@@ -4,6 +4,15 @@ Wavelog Rig Control daemon, by William Nutt M7CLG.
 Forked from clrigctl v0.2.0 by Martin Brodbeck DG2SMB.
 Club project: target deployment is BADARC (a local radio club).
 
+## Development workflow
+
+Before suggesting a push, run `make ci` and confirm it passes.  The Makefile
+comment says the same: "This is the thing to run before pushing."  Do not
+suggest pushing until CI is green locally.
+
+`make fix` auto-corrects formatting and clippy lint suggestions, then runs
+the full suite — use it when `make ci` fails on fmt or clippy.
+
 ## What it does
 
 Four concurrent async tasks glued together with `Arc<FLRig>`:
