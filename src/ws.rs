@@ -3,12 +3,12 @@ use futures_util::{SinkExt, StreamExt};
 use log::{debug, info, warn};
 use rcgen::generate_simple_self_signed;
 use rustls::ServerConfig;
-use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
-use rustls_pemfile::{certs, private_key};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use rustls_pki_types::pem::PemObject;
 use serde::Deserialize;
 use serde_json::json;
-use std::fs::{self, File};
-use std::io::{self, BufReader};
+use std::fs;
+use std::io;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -54,18 +54,12 @@ impl WsSettings {
 
 /// Build a [`TlsAcceptor`] from PEM files provided by the user.
 fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor> {
-    let cert_chain: Vec<CertificateDer<'static>> = {
-        let f = File::open(cert_path)?;
-        certs(&mut BufReader::new(f))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid cert PEM"))?
-    };
+    let cert_chain: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(cert_path)
+        .map_err(io::Error::other)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(io::Error::other)?;
 
-    let key = {
-        let f = File::open(key_path)?;
-        private_key(&mut BufReader::new(f))?
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no private key found in file"))?
-    };
+    let key = PrivateKeyDer::from_pem_file(key_path).map_err(io::Error::other)?;
 
     let config = ServerConfig::builder()
         .with_no_client_auth()
