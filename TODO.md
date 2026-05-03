@@ -82,6 +82,4 @@ See CLAUDE.md for design decisions and known quirks.
   `.cargo/config.toml` but not built in CI.  If BADARC ever deploys on a Pi,
   add a cross-build step (e.g. using `cross`) so breakage is caught early.
 
-- **CHANGELOG** — there is no changelog.  GitHub's auto-generated release notes
-  are adequate for now, but a hand-curated `CHANGELOG.md` becomes valuable once
-  external users are tracking upgrades.
+- ~~**CHANGELOG**~~ — done; `CHANGELOG.md` added covering 0.3.0–0.4.2 and unreleased.
