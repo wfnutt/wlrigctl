@@ -2,8 +2,9 @@ use crate::wavelog::RadioData;
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, info, warn};
 use rcgen::generate_simple_self_signed;
-use rustls::{Certificate, PrivateKey, ServerConfig};
-use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
+use rustls::ServerConfig;
+use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use rustls_pemfile::{certs, private_key};
 use serde_derive::Deserialize;
 use serde_json::json;
 use std::fs::{self, File};
@@ -53,36 +54,22 @@ impl WsSettings {
 
 /// Build a [`TlsAcceptor`] from PEM files provided by the user.
 fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor> {
-    let certs = {
+    let cert_chain: Vec<CertificateDer<'static>> = {
         let f = File::open(cert_path)?;
         certs(&mut BufReader::new(f))
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid cert PEM"))?
-            .into_iter()
-            .map(Certificate)
-            .collect::<Vec<_>>()
     };
 
     let key = {
         let f = File::open(key_path)?;
-        let mut r = BufReader::new(f);
-        let pkcs8 = pkcs8_private_keys(&mut r)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid key PEM"))?;
-        if let Some(k) = pkcs8.into_iter().next() {
-            PrivateKey(k)
-        } else {
-            let f2 = File::open(key_path)?;
-            let rsa = rsa_private_keys(&mut BufReader::new(f2))
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid key PEM"))?;
-            PrivateKey(rsa.into_iter().next().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "no private key found in file")
-            })?)
-        }
+        private_key(&mut BufReader::new(f))?
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no private key found in file"))?
     };
 
     let config = ServerConfig::builder()
-        .with_safe_defaults()
         .with_no_client_auth()
-        .with_single_cert(certs, key)
+        .with_single_cert(cert_chain, key)
         .map_err(io::Error::other)?;
 
     Ok(TlsAcceptor::from(Arc::new(config)))
@@ -91,9 +78,11 @@ fn load_tls_acceptor(cert_path: &str, key_path: &str) -> io::Result<TlsAcceptor>
 /// Build a [`TlsAcceptor`] directly from DER-encoded cert and key bytes.
 fn tls_acceptor_from_der(cert_der: Vec<u8>, key_der: Vec<u8>) -> io::Result<TlsAcceptor> {
     let config = ServerConfig::builder()
-        .with_safe_defaults()
         .with_no_client_auth()
-        .with_single_cert(vec![Certificate(cert_der)], PrivateKey(key_der))
+        .with_single_cert(
+            vec![CertificateDer::from(cert_der)],
+            PrivatePkcs8KeyDer::from(key_der).into(),
+        )
         .map_err(io::Error::other)?;
     Ok(TlsAcceptor::from(Arc::new(config)))
 }

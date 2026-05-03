@@ -32,7 +32,7 @@ tokio-tungstenite = "0.21"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 rcgen = "0.12"
 rustls = "0.23"
-rustls-pki-types = "1.14"
+rustls-pemfile = "2"
 tokio-rustls = "0.26"
 
 [profile.release]
