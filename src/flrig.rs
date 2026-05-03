@@ -238,7 +238,7 @@ fn cw_narrow_index(mode: Mode, cw_bw_index: Option<u32>) -> Option<u32> {
 impl FLRig {
     pub fn new(settings: FlrigSettings, identifier: String) -> FLRig {
         let url = format!("{0}:{1}/", settings.host, settings.port);
-        let url = Url::parse(&url).expect("\"{url}\" does not parse as a url.");
+        let url = Url::parse(&url).unwrap_or_else(|_| panic!("{url} does not parse as a URL"));
         let client: Client = ClientBuilder::new(url).build();
         FLRig {
             maxpower: settings.maxpower,
