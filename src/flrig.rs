@@ -340,9 +340,6 @@ impl FLRig {
         }
 
         // Always restore narrow filter when targeting CW. Band memory may have
-        // already switched the rig to CW (bypassing the change path above), so
-        // set_narrow must not be inside the mode-change branch.
-        // Always restore narrow filter when targeting CW. Band memory may have
         // already switched the rig to CW (bypassing the mode-change branch above),
         // so this must not be gated on whether the mode actually changed.
         if let Some(idx) = cw_narrow_index(mode, self.cw_bw_index) {
