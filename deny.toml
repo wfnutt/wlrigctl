@@ -23,13 +23,11 @@
 # dependencies not shared by any other crates, would be ignored, as the target
 # list here is effectively saying which targets you are building for.
 targets = [
-    # The triple can be any string, but only the target triples built in to
-    # rustc (as of 1.40) can be checked against actual config expressions
-    #"x86_64-unknown-linux-musl",
-    # You can also specify which target_features you promise are enabled for a
-    # particular target. target_features are currently not validated against
-    # the actual valid features supported by the target architecture.
-    #{ triple = "wasm32-unknown-unknown", features = ["atomics"] },
+    # wlrigctl targets Linux only (x86_64 dev host, aarch64 Raspberry Pi).
+    # Restricting to these triples excludes Windows/UEFI/WASM deps that appear
+    # transitively (e.g. r-efi, wit-bindgen) but are never compiled for us.
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
 ]
 # When creating the dependency graph used as the source of truth when checks are
 # executed, this field can be used to prune crates from the graph, removing them
@@ -94,7 +92,6 @@ allow = [
     #"Apache-2.0 WITH LLVM-exception",
     "ISC",
     "Unicode-3.0",
-    "CDLA-Permissive-2.0",
     "BSD-3-Clause",
 ]
 # The confidence threshold for detecting a license from license text.
@@ -205,9 +202,14 @@ deny = [
 #exact = true
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
+#
+# All entries below are rooted in dxr_client 0.7.1 pinning reqwest 0.12.
+# They will resolve automatically once dxr_client publishes reqwest 0.13 support.
+# See TODO.md "Unify reqwest versions".
 skip = [
-    #"ansi_term@0.11.0",
-    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
+    { crate = "reqwest@0.12.28",      reason = "dxr_client 0.7.1 pins reqwest 0.12; blocked on upstream release" },
+    { crate = "thiserror@1.0.69",     reason = "dxr and dxr_client pin thiserror 1.x; follows from reqwest 0.12 lock" },
+    { crate = "thiserror-impl@1.0.69", reason = "proc-macro companion to thiserror 1.x; same root cause as thiserror skip" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
