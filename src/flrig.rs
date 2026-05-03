@@ -310,15 +310,10 @@ impl FLRig {
     }
 
     pub async fn set_mode(&self, mode: Mode) -> Result<(), FlrigError> {
-        // Rather than glitch the radio, if the required mode is already in effect, leave it alone.
-        // This matters because if we're already in a mode with a reduced bandwidth or filter,
-        // the rig is nice and quiet. If we perturb the mode, FLRig will set a wider bandwidth
-        // on IC-703, then a split-second later we apply our cwbandwidth option to put the filter
-        // back in place. This causes a noticeable audio disturbance which is distracting.
-        //
-        // Tested on IC-703: cwbandwidth is still required. Hysteresis alone is not sufficient —
-        // when switching away from CW and back again via the Wavelog bandlist, the narrow filter
-        // is not restored without the follow-up rig.set_bw call.
+        // Avoid re-sending the mode command if the rig is already in the target mode.
+        // rig.set_mode causes FLRig to momentarily apply a wide default bandwidth before the
+        // mode settles; skipping the redundant call prevents an audible filter glitch.
+        // Note: this guard only wraps rig.set_mode, not set_narrow — see below.
         let existing_mode_str: String = self.get_mode().await?;
 
         // Since we're converting the mode returned from FLRig's get_mode(), we have to handle the
@@ -329,14 +324,14 @@ impl FLRig {
             })
         })?;
 
-        if mode == existing_mode {
-            // we're done
-            return Ok(());
+        if mode != existing_mode {
+            info!("calling rig.set_mode with mode:{mode}");
+            let _response: i32 = self.client.call("rig.set_mode", mode.to_string()).await?;
         }
 
-        info!("calling rig.set_mode with mode:{mode}");
-
-        let _response: i32 = self.client.call("rig.set_mode", mode.to_string()).await?;
+        // Always restore narrow filter when targeting CW. Band memory may have
+        // already switched the rig to CW (bypassing the change path above), so
+        // set_narrow must not be inside the mode-change branch.
         if let Some(cwbandwidth) = self.cwbandwidth {
             if mode == Mode::CW {
                 info!("Bodging narrow filter on IC-703");
