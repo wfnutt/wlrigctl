@@ -15,7 +15,10 @@ pub struct FlrigSettings {
     pub host: String,
     pub port: u16,
     pub maxpower: u32,
-    pub cwbandwidth: Option<u32>,
+    /// Index into FLRig's bandwidth table to apply after every CW mode change.
+    /// This is NOT a value in Hz.  See CLAUDE.md for the IC-703 FLRig bug that
+    /// makes index 1 (labelled "MED") the correct choice for the narrow filter.
+    pub cw_bw_index: Option<u32>,
 }
 
 // Internal state
@@ -24,7 +27,7 @@ pub struct FLRig {
     maxpower: u32, // Watts
     client: Client,
     identifier: String,
-    cwbandwidth: Option<u32>,
+    cw_bw_index: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -225,11 +228,11 @@ pub fn build_mode_map(cw: Option<&str>, rtty: Option<&str>, digital: Option<&str
     map
 }
 
-// Returns true when a follow-up set_narrow call is needed after set_mode.
-// Extracted as a pure function so the condition can be tested independently
-// of the async XMLRPC path.
-fn should_restore_narrow(mode: Mode, cwbandwidth: Option<u32>) -> bool {
-    cwbandwidth.is_some() && mode == Mode::CW
+// Returns the bandwidth index to pass to set_narrow when entering CW mode,
+// or None when no filter adjustment is needed.  Extracted as a pure function
+// so the logic can be tested without touching the async XMLRPC path.
+fn cw_narrow_index(mode: Mode, cw_bw_index: Option<u32>) -> Option<u32> {
+    cw_bw_index.filter(|_| mode == Mode::CW)
 }
 
 impl FLRig {
@@ -241,7 +244,7 @@ impl FLRig {
             maxpower: settings.maxpower,
             client,
             identifier,
-            cwbandwidth: settings.cwbandwidth,
+            cw_bw_index: settings.cw_bw_index,
         }
     }
 
@@ -339,17 +342,19 @@ impl FLRig {
         // Always restore narrow filter when targeting CW. Band memory may have
         // already switched the rig to CW (bypassing the change path above), so
         // set_narrow must not be inside the mode-change branch.
-        if should_restore_narrow(mode, self.cwbandwidth) {
+        // Always restore narrow filter when targeting CW. Band memory may have
+        // already switched the rig to CW (bypassing the mode-change branch above),
+        // so this must not be gated on whether the mode actually changed.
+        if let Some(idx) = cw_narrow_index(mode, self.cw_bw_index) {
             info!("Bodging narrow filter on IC-703");
-            let bw = self.cwbandwidth.unwrap(); // safe: predicate guarantees Some
-            self.set_narrow(bw as i32).await?;
+            self.set_narrow(idx as i32).await?;
         }
 
         Ok(())
     }
 
-    pub async fn set_narrow(&self, cwbandwidth: i32) -> Result<(), ClientError> {
-        let _response: i32 = self.client.call("rig.set_bw", cwbandwidth).await?;
+    pub async fn set_narrow(&self, bw_index: i32) -> Result<(), ClientError> {
+        let _response: i32 = self.client.call("rig.set_bw", bw_index).await?;
 
         Ok(())
     }
@@ -377,7 +382,7 @@ mod tests {
             host: "http://127.0.0.1".to_string(),
             port: 19999,
             maxpower: 100,
-            cwbandwidth: None,
+            cw_bw_index: None,
         }
     }
 
@@ -392,6 +397,37 @@ mod tests {
         // Port 19999 has nothing listening; the connection should be refused.
         let rig = FLRig::new(test_settings(), "IC-703".to_string());
         assert!(rig.get_mode().await.is_err());
+    }
+
+    // Tests for cw_narrow_index.
+    // Three cases characterise the function completely.
+    // The third case (non-CW mode with cw_bw_index set) is the one the old
+    // code got wrong: set_narrow was inside the mode-change branch so it would
+    // never fire when the rig was already in CW (band memory QSY path).
+    //
+    // Index 1 is used throughout because it is the correct IC-703 value: FLRig
+    // labels it "MED" but it is the entry that activates the hardware narrow
+    // filter (N indicator on).  See CLAUDE.md for the FLRig bug explanation.
+
+    #[test]
+    fn cw_narrow_index_returns_index_for_cw_with_index_configured() {
+        assert_eq!(cw_narrow_index(Mode::CW, Some(1)), Some(1));
+    }
+
+    #[test]
+    fn cw_narrow_index_returns_none_for_cw_without_index_configured() {
+        assert_eq!(cw_narrow_index(Mode::CW, None), None);
+    }
+
+    #[test]
+    fn cw_narrow_index_returns_none_for_non_cw_modes() {
+        for mode in [Mode::USB, Mode::LSB, Mode::RTTY, Mode::FM, Mode::AM, Mode::D_USB] {
+            assert_eq!(
+                cw_narrow_index(mode, Some(1)),
+                None,
+                "cw_narrow_index returned Some for {mode:?} — only CW should yield an index"
+            );
+        }
     }
 
     #[test]

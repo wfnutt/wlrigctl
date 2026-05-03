@@ -33,9 +33,19 @@ port = 12345
 # It would be nice if we could reliably query all radios for max. power, but...
 maxpower = "10"
 
-# on IC-703, set_bandwidth() with index 1 selects narrow 250Hz filter for CW
-# (if fitted...)
-cwbandwidth = 1
+# IC-703 CW narrow filter workaround (remove if filter not fitted).
+#
+# FLRig presents the IC-703 CW bandwidth options as:
+#   index 0 = NARR,  index 1 = MED,  index 2 = WIDE
+#
+# Due to a bug in FLRig's IC-703 driver, selecting NARR (index 0) does NOT
+# activate the hardware narrow filter (the N indicator goes out); selecting
+# MED (index 1) DOES activate it (N indicator comes on).
+# The correct value is therefore 1, not 0.
+#
+# This value is an INDEX into FLRig's bandwidth table — it is NOT in Hz.
+# Use rig.get_bws via the FLRig XMLRPC interface to see your rig's table.
+# cw_bw_index = 1
 
 
 

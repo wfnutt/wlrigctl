@@ -15,9 +15,10 @@ Four concurrent async tasks glued together with `Arc<FLRig>`:
 | `CAT_thread` | Wavelog → FLRig | HTTP GET receive + XMLRPC |
 | `ws_thread` *(optional)* | FLRig → browser | WebSocket push |
 
-`wavelog_thread` and `ws_thread` share a `tokio::sync::broadcast` channel
-(capacity 4); `wavelog_thread` sends on every rig-state change, `ws_thread`
-fans the update out to all connected WebSocket clients.
+`wavelog_thread` and `ws_thread` share a `tokio::sync::watch` channel;
+`wavelog_thread` publishes on every rig-state change, `ws_thread` fans the
+latest value out to all connected WebSocket clients and pushes it immediately
+to each new client on connect.
 
 Config lives at `~/.config/wlrigctl/config.toml` (XDG-aware).
 Runs as a systemd user service (`systemctl --user`).
@@ -55,13 +56,22 @@ the hyper server is required so the server keeps the connection open long enough
 to finish writing the reply. Without it, serving the connection errors out.
 
 ### IC-703 CW narrow filter bodge (flrig.rs `set_mode`)
-When changing to CW mode on an IC-703, FLRig briefly applies a wide default
-bandwidth before the mode change fully settles. The `cwbandwidth` config option
-triggers a follow-up `rig.set_bw` call to restore the narrow filter. This causes
-a brief audio glitch. The hysteresis in `set_mode` (no-op if already in the
-target mode) minimises how often this happens. The `cwbandwidth` follow-up call
-is confirmed necessary: without it, switching away from CW and back via the
-Wavelog bandlist does not restore the narrow filter.
+FLRig presents three CW bandwidth options for the IC-703: NARR / MED / WIDE
+(indices 0 / 1 / 2).  Due to a bug in FLRig's IC-703 driver, selecting NARR
+(index 0) does **not** activate the hardware narrow filter (N indicator goes
+out); selecting MED (index 1) **does** (N indicator comes on).  The correct
+`cw_bw_index` value is therefore 1, not 0.
+
+`cw_bw_index` is an index into FLRig's bandwidth table, **not a value in Hz**.
+When set, `set_mode` calls `rig.set_bw` with that index after every CW mode
+change.  This is necessary because FLRig resets bandwidth to a wide default
+when applying a mode change; without the follow-up call the narrow filter is
+not restored.
+
+The `cw_narrow_index` helper in `flrig.rs` encapsulates the two-condition check
+(target mode is CW AND `cw_bw_index` is configured) and returns the index
+directly, so the call site can `if let Some(idx) = cw_narrow_index(...)` with
+no unwrap.  The helper is unit-tested independently of the async XMLRPC path.
 
 ### Per-rig mode naming (`flrig.rs` `Mode` enum, `cat.rs` `CatSettings`)
 FLRig mirrors whatever mode names the physical radio displays rather than
