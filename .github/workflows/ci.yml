@@ -28,8 +28,9 @@ jobs:
       - run: cargo test
 
   # ── Audit ─────────────────────────────────────────────────────────────────
-  # Checks Cargo.lock against the RustSec advisory database.
-  # Runs in parallel with test; does not need a compiled project.
+  # Checks Cargo.lock for security advisories (cargo audit) and licence/
+  # duplicate/source policy (cargo deny).  Neither tool needs a compiled
+  # project, so they run in parallel with test.
 
   audit:
     runs-on: ubuntu-latest
@@ -48,6 +49,14 @@ jobs:
           key: advisory-db-${{ github.run_id }}
           restore-keys: advisory-db-
       - run: cargo audit
+      - uses: actions/cache@v5
+        id: cache-cargo-deny
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-${{ runner.os }}
+      - if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
+        run: cargo install --locked cargo-deny
+      - run: cargo deny check
 
   # ── Build ─────────────────────────────────────────────────────────────────
   # Verifies the release binary compiles on every push.
