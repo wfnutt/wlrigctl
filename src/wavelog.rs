@@ -73,19 +73,14 @@ pub fn wavelog_thread(
     rig_poll: Arc<flrig::FLRig>,
     token: CancellationToken,
     ws_tx: broadcast::Sender<Arc<RadioData>>,
-    cat_token: Arc<String>,
 ) {
-    let cat_url = settings
-        .cat_url
-        .as_ref()
-        .map(|url| format!("{}/{}", url.trim_end_matches('/'), cat_token));
     let mut radio_data_current = RadioData {
         key: settings.key.clone(),
         radio: settings.identifier.clone(),
         frequency: String::from(""),
         mode: String::from(""),
         power: String::from("0"),
-        cat_url,
+        cat_url: settings.cat_url.clone(),
     };
 
     tokio::task::spawn(async move {

@@ -64,6 +64,20 @@ port = 54321
 #   Elecraft (generic DATA mode):
 # digital_mode = "DATA"
 
+# Origin check — recommended when Wavelog is served over HTTPS.
+# Set this to the exact URL origin of your Wavelog installation (no trailing
+# slash).  When set, the CAT server rejects any QSY request whose HTTP Origin
+# header does not match.  This stops a malicious browser page from QSYing your
+# radio via a CSRF request.
+#
+# NOTE: this only defends against browser-based attacks.  A local process with
+# raw network access can forge any HTTP header and bypass this check entirely.
+# If Docker is running on this machine, see the note in CLAUDE.md about
+# Docker's iptables DNAT rules — loopback binding alone does not prevent a
+# host-networked container from reaching this port.
+#
+# wavelog_origin = "https://wavelog.example.org"
+
 # FT8 dial frequencies in Hz. When present this list replaces the built-in
 # defaults so you can update the band plan without recompiling.
 # The default list (used when this key is absent) is:

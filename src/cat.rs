@@ -25,15 +25,6 @@ use crate::{flrig, flrig::Mode, flrig::ModeMap};
 
 const CAT_BIND_HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
 
-pub fn generate_cat_token() -> String {
-    use std::io::Read;
-    let mut bytes = [0u8; 16];
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut f| f.read_exact(&mut bytes))
-        .expect("Failed to read from /dev/urandom — cannot generate CAT token");
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
 // UK amateur frequency allocations permitted across all licence classes
 // (Foundation as the common baseline), in Hz.
 // Source: Ofcom Amateur Radio Licence Tables A–C, October 2025.
@@ -80,6 +71,11 @@ pub struct CatSettings {
     /// FT8 dial frequencies in Hz. Overrides the built-in list when present.
     /// Example: ft8_frequencies = [1840000, 3575000, 7074000]
     pub ft8_frequencies: Option<Vec<u64>>,
+    /// Expected value of the HTTP `Origin` header on incoming QSY requests.
+    /// When set, requests whose `Origin` does not match are rejected with 403.
+    /// Protects against browser-based CSRF from pages not served by Wavelog.
+    /// Example: wavelog_origin = "https://wavelog.example.org"
+    pub wavelog_origin: Option<String>,
 }
 
 #[allow(clippy::upper_case_acronyms)]
@@ -175,8 +171,19 @@ fn http_err_str(status: StatusCode, msg: impl Into<String>) -> HttpResponse {
     }
 }
 
-// Parse '/<cat_token>/<freq>/<mode>' into a typed struct: Qsy
-fn parse_qsy_path<B>(req: &Request<B>, cat_token: &str) -> Result<Qsy, Box<HttpResponse>> {
+// Returns true if the request's Origin header matches `expected` exactly.
+// browsers set Origin automatically and JS cannot override it, so this
+// reliably blocks cross-origin browser CSRF.  Local non-browser processes
+// can forge any header, so this is not a defence against them.
+fn check_origin<B>(req: &Request<B>, expected: &str) -> bool {
+    req.headers()
+        .get("origin")
+        .and_then(|v| v.to_str().ok())
+        .map_or(false, |o| o == expected)
+}
+
+// Parse '/<freq>/<mode>' into a typed struct: Qsy
+fn parse_qsy_path<B>(req: &Request<B>) -> Result<Qsy, Box<HttpResponse>> {
     let parts: Vec<&str> = req
         .uri()
         .path()
@@ -184,19 +191,13 @@ fn parse_qsy_path<B>(req: &Request<B>, cat_token: &str) -> Result<Qsy, Box<HttpR
         .split('/')
         .collect();
 
-    let &[token, freq_str, mode_str] = parts.as_slice() else {
+    let &[freq_str, mode_str] = parts.as_slice() else {
+        debug!("parse_qsy_path: wrong segment count ({})", parts.len());
         return Err(Box::new(http_err_str(
             StatusCode::BAD_REQUEST,
-            "Expected /<token>/<freq>/<mode>",
+            "Expected /<freq>/<mode>",
         )));
     };
-
-    if token != cat_token {
-        return Err(Box::new(http_err_str(
-            StatusCode::UNAUTHORIZED,
-            "Invalid token",
-        )));
-    }
 
     let freq: u32 = freq_str.parse::<u32>().map_err(|_| {
         Box::new(http_err_str(
@@ -212,9 +213,10 @@ fn parse_qsy_path<B>(req: &Request<B>, cat_token: &str) -> Result<Qsy, Box<HttpR
         )));
     }
 
-    let mode = mode_str
-        .parse::<WavelogMode>()
-        .map_err(|_| Box::new(http_err_str(StatusCode::BAD_REQUEST, "Invalid mode")))?;
+    let mode = mode_str.parse::<WavelogMode>().map_err(|_| {
+        debug!("parse_qsy_path: unrecognised mode {:?}", mode_str);
+        Box::new(http_err_str(StatusCode::BAD_REQUEST, "Invalid mode"))
+    })?;
     Ok(Qsy {
         freq: freq as f64,
         mode,
@@ -265,11 +267,18 @@ async fn qsy(
     req: Request<hyper::body::Incoming>,
     mode_map: Arc<ModeMap>,
     ft8_freqs: Arc<[f64]>,
-    cat_token: Arc<String>,
+    wavelog_origin: Option<Arc<String>>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     info!("qsy() called");
 
-    let qsyinfo = match parse_qsy_path(&req, &cat_token) {
+    if let Some(expected) = &wavelog_origin {
+        if !check_origin(&req, expected) {
+            debug!("qsy: Origin header missing or does not match configured wavelog_origin");
+            return Ok(http_err_str(StatusCode::FORBIDDEN, "Forbidden"));
+        }
+    }
+
+    let qsyinfo = match parse_qsy_path(&req) {
         Err(e) => return Ok(*e), // Infallible
         Ok(q) => q,
     };
@@ -317,7 +326,6 @@ pub async fn CAT_thread(
     settings: CatSettings,
     rig: &Arc<flrig::FLRig>,
     token: CancellationToken,
-    cat_token: Arc<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Listen on TCP socket for someone in Cloudlog/Wavelog clicking the bandmap
     let addr = SocketAddr::from((CAT_BIND_HOST, settings.port));
@@ -334,6 +342,8 @@ pub async fn CAT_thread(
         Some(freqs) => freqs.iter().map(|&f| f as f64).collect::<Vec<f64>>().into(),
         None => Arc::from(DEFAULT_FT8_FREQS.as_slice()),
     };
+
+    let wavelog_origin: Option<Arc<String>> = settings.wavelog_origin.map(Arc::new);
 
     info!("Listening for CAT requests from Wavelog on: {:#?}", addr);
 
@@ -352,7 +362,7 @@ pub async fn CAT_thread(
         let rig_for_qsy = rig.clone();
         let mode_map_for_qsy = mode_map.clone();
         let ft8_freqs_for_qsy = ft8_freqs.clone();
-        let cat_token_for_qsy = cat_token.clone();
+        let wavelog_origin_for_qsy = wavelog_origin.clone();
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .half_close(true)
@@ -364,7 +374,7 @@ pub async fn CAT_thread(
                             req,
                             mode_map_for_qsy.clone(),
                             ft8_freqs_for_qsy.clone(),
-                            cat_token_for_qsy.clone(),
+                            wavelog_origin_for_qsy.clone(),
                         )
                     }),
                 )
@@ -887,44 +897,27 @@ mod tests {
     // Tests for parse_qsy_path input validation
     //////////////////////////////////////////////////////////////
 
-    const TEST_TOKEN: &str = "testtoken";
-
     fn make_get(path: &str) -> Request<()> {
-        Request::builder()
-            .uri(format!("/{TEST_TOKEN}{path}"))
-            .body(())
-            .unwrap()
+        Request::builder().uri(path).body(()).unwrap()
     }
 
     // --- Malformed paths ---
 
     #[test]
     fn qsy_path_single_segment_rejected() {
-        // No token or freq/mode at all.
         let req = Request::builder().uri("/14030000").body(()).unwrap();
-        assert!(parse_qsy_path(&req, TEST_TOKEN).is_err());
+        assert!(parse_qsy_path(&req).is_err());
     }
 
     #[test]
     fn qsy_path_empty_rejected() {
         let req = Request::builder().uri("/").body(()).unwrap();
-        assert!(parse_qsy_path(&req, TEST_TOKEN).is_err());
+        assert!(parse_qsy_path(&req).is_err());
     }
 
     #[test]
-    fn qsy_path_four_segments_rejected() {
-        assert!(parse_qsy_path(&make_get("/14030000/cw/extra"), TEST_TOKEN).is_err());
-    }
-
-    // --- Token check ---
-
-    #[test]
-    fn qsy_wrong_token_rejected() {
-        let req = Request::builder()
-            .uri("/wrongtoken/14074000/usb")
-            .body(())
-            .unwrap();
-        assert!(parse_qsy_path(&req, TEST_TOKEN).is_err());
+    fn qsy_path_three_segments_rejected() {
+        assert!(parse_qsy_path(&make_get("/14030000/cw/extra")).is_err());
     }
 
     // --- Frequency allowlist: out-of-band inputs rejected ---
@@ -932,7 +925,7 @@ mod tests {
     #[test]
     fn qsy_rejects_zero_frequency() {
         assert!(
-            parse_qsy_path(&make_get("/0/usb"), TEST_TOKEN).is_err(),
+            parse_qsy_path(&make_get("/0/usb")).is_err(),
             "frequency 0 Hz must be rejected"
         );
     }
@@ -941,7 +934,7 @@ mod tests {
     fn qsy_rejects_broadcast_band_frequency() {
         // 909 kHz is an AM broadcast frequency, not an amateur allocation.
         assert!(
-            parse_qsy_path(&make_get("/909000/usb"), TEST_TOKEN).is_err(),
+            parse_qsy_path(&make_get("/909000/usb")).is_err(),
             "broadcast-band frequency 909 kHz must be rejected"
         );
     }
@@ -950,7 +943,7 @@ mod tests {
     fn qsy_rejects_max_u32_frequency() {
         // 4,294,967,295 Hz (~4.3 GHz) is not an amateur allocation.
         assert!(
-            parse_qsy_path(&make_get("/4294967295/usb"), TEST_TOKEN).is_err(),
+            parse_qsy_path(&make_get("/4294967295/usb")).is_err(),
             "out-of-range frequency 4294967295 Hz must be rejected"
         );
     }
@@ -959,7 +952,7 @@ mod tests {
     fn qsy_rejects_between_bands() {
         // 11 MHz falls between 30m (10.15 MHz) and 20m (14.0 MHz).
         assert!(
-            parse_qsy_path(&make_get("/11000000/usb"), TEST_TOKEN).is_err(),
+            parse_qsy_path(&make_get("/11000000/usb")).is_err(),
             "inter-band frequency 11 MHz must be rejected"
         );
     }
@@ -982,7 +975,7 @@ mod tests {
         ];
         for path in valid {
             assert!(
-                parse_qsy_path(&make_get(path), TEST_TOKEN).is_ok(),
+                parse_qsy_path(&make_get(path)).is_ok(),
                 "expected Ok for {path}"
             );
         }
@@ -1020,5 +1013,38 @@ mod tests {
         for freq in out_of_band {
             assert!(!is_amateur_frequency(freq), "{freq} Hz should be rejected");
         }
+    }
+
+    //////////////////////////////////////////////////////////////
+    // Tests for check_origin
+    //////////////////////////////////////////////////////////////
+
+    #[test]
+    fn origin_correct_accepted() {
+        let req = Request::builder()
+            .header("origin", "https://wavelog.example.org")
+            .uri("/14074000/usb")
+            .body(())
+            .unwrap();
+        assert!(check_origin(&req, "https://wavelog.example.org"));
+    }
+
+    #[test]
+    fn origin_wrong_rejected() {
+        let req = Request::builder()
+            .header("origin", "https://evil.example.com")
+            .uri("/14074000/usb")
+            .body(())
+            .unwrap();
+        assert!(!check_origin(&req, "https://wavelog.example.org"));
+    }
+
+    #[test]
+    fn origin_missing_rejected() {
+        let req = Request::builder()
+            .uri("/14074000/usb")
+            .body(())
+            .unwrap();
+        assert!(!check_origin(&req, "https://wavelog.example.org"));
     }
 }
