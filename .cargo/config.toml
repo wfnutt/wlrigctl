@@ -1,4 +1,10 @@
 [build]
+# rustc 1.95.0 macro expander recursion overflows the default 8 MB thread stack
+# on some Linux systems; 16 MB clears it.  Remove once the upstream bug is fixed.
+rustflags = []
+
+[env]
+RUST_MIN_STACK = "16777216"
 
 # Pi 2/3/4/5
 [target.aarch64-unknown-linux-gnu]
