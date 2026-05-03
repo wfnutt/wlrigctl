@@ -125,16 +125,6 @@ Wavelog's `/index.php/api/radio` endpoint.  When set, Wavelog auto-registers the
 CAT callback URL so the bandmap QSY button works without manual configuration in
 the Wavelog admin panel.
 
-## Remaining TODO items
-
-- **Add GitLab CI pipeline** — plan already written at
-  `/workspace/backup-riddle.md`. Creates `.gitlab-ci.yml` with three stages:
-  `test` (`cargo test`), `build` (`cargo build --release`, emits binary
-  artifact), `package` (runs only when `Cargo.toml` changes; compares version
-  against `HEAD~1`; if bumped, runs `cargo deb --no-build` and emits the `.deb`
-  as a pipeline artifact). Uses a shared cargo cache keyed on `Cargo.lock`;
-  `GIT_DEPTH: "2"` for the `HEAD~1` comparison.
-
 ## Dependency notes
 
 | Crate | Why it's here |
