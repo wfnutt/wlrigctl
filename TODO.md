@@ -12,9 +12,8 @@ See CLAUDE.md for design decisions and known quirks.
   0.12).  Pulling in 0.12 also resolves the trailing TLS-stack lag:
   `rustls 0.21 → 0.23`, `tokio-rustls 0.24 → 0.26`, `rustls-pemfile 1 → 2`.
 
-- **Add `cargo audit` to CI** — detect known CVEs in the dependency tree on
-  every push.  One additional `run: cargo audit` step in the `test` job is
-  sufficient.  Needs `cargo install cargo-audit` (or a cache step) first.
+- ~~**Add `cargo audit` to CI**~~ — done; separate `audit` job runs in parallel
+  with `test`; `build` will not proceed if audit fails.
 
 ---
 

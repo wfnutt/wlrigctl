@@ -27,12 +27,34 @@ jobs:
       - run: cargo clippy -- -D warnings
       - run: cargo test
 
+  # ── Audit ─────────────────────────────────────────────────────────────────
+  # Checks Cargo.lock against the RustSec advisory database.
+  # Runs in parallel with test; does not need a compiled project.
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
+        id: cache-cargo-audit
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}
+      - if: steps.cache-cargo-audit.outputs.cache-hit != 'true'
+        run: cargo install --locked cargo-audit
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cargo/advisory-db
+          key: advisory-db-${{ github.run_id }}
+          restore-keys: advisory-db-
+      - run: cargo audit
+
   # ── Build ─────────────────────────────────────────────────────────────────
   # Verifies the release binary compiles on every push.
   # Produces the binary as a downloadable artifact (kept 7 days).
 
   build:
-    needs: test
+    needs: [test, audit]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
