@@ -901,6 +901,18 @@ mod tests {
         Request::builder().uri(path).body(()).unwrap()
     }
 
+    // --- Baseline: exact wire format Wavelog sends ---
+
+    #[test]
+    fn qsy_path_wavelog_wire_format_accepted() {
+        // Wavelog constructs the QSY URL as <cat_url>/<freq>/<mode>.
+        // This test documents and locks that format.  If parse_qsy_path ever
+        // stops accepting it, something has broken the Wavelog integration.
+        assert!(parse_qsy_path(&make_get("/14074000/usb")).is_ok());
+        assert!(parse_qsy_path(&make_get("/7074000/digi")).is_ok());
+        assert!(parse_qsy_path(&make_get("/3573000/cw")).is_ok());
+    }
+
     // --- Malformed paths ---
 
     #[test]
