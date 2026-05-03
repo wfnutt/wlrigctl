@@ -5,7 +5,7 @@ use rcgen::generate_simple_self_signed;
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use rustls_pemfile::{certs, private_key};
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use serde_json::json;
 use std::fs::{self, File};
 use std::io::{self, BufReader};

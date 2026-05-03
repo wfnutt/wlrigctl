@@ -1,6 +1,6 @@
 use crate::wavelog::RadioData;
 use log::{debug, info, warn};
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use std::fmt;
 use std::result::Result;
 use std::str::FromStr;

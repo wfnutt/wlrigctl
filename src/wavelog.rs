@@ -1,8 +1,7 @@
 use crate::flrig;
 use log::{debug, info};
 use reqwest::{Client, Error};
-use serde::Serialize;
-use serde_derive::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::watch;

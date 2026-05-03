@@ -10,30 +10,28 @@ Based upon earlier work on clrigctl, by Martin Brodbeck, DG2SMB.
 """
 
 [dependencies]
-config = { version = "0.15.22", features = ["toml"] }
-env_logger = "0.10.1"
-home = "0.5.5"
-log = "0.4.20"
-quick-xml = { version = "0.31.0", features = ["serde", "serialize"] }
-reqwest = { version = "0.13.3", default-features = false, features = ["json", "rustls"] }
-serde = { version = "1.0.193", features = ["serde_derive"] }
-serde_derive = "1.0.193"
-hyper = { version = "1", features = ["full"] }
-tokio = { version = "1.34.0", features = ["full"] }
-http-body-util = "0.1"
-hyper-util = { version = "0.1", features = ["full"] }
-dxr_client = { version = "0.7.1", features = ["reqwest", "multicall"] }
-dxr = { version = "0.7.1", features = ["multicall"] }
-url = "2"
-serde_json = "1.0.145"
 bincode2 = "2.0.1"
-tokio-util = { version = "0.7" }
-tokio-tungstenite = "0.21"
+config = { version = "0.15.22", default-features = false, features = ["toml"] }
+dxr = { version = "0.7.1", features = ["multicall"] }
+dxr_client = { version = "0.7.1", features = ["reqwest", "multicall"] }
+env_logger = "0.10.1"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+home = "0.5.5"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+log = "0.4.20"
 rcgen = "0.12"
+reqwest = { version = "0.13.3", default-features = false, features = ["json", "rustls"] }
 rustls = "0.23"
 rustls-pemfile = "2"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.145"
+tokio = { version = "1.34.0", features = ["rt-multi-thread", "macros", "sync", "net", "time", "signal", "io-util"] }
 tokio-rustls = "0.26"
+tokio-tungstenite = "0.21"
+tokio-util = { version = "0.7" }
+url = "2"
 
 [profile.release]
 strip = "symbols"

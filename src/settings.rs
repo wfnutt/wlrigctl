@@ -1,6 +1,6 @@
 use config::{Config, ConfigError, File};
 use home::home_dir;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use std::env;
 use std::path::PathBuf;
 

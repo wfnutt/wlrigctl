@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
