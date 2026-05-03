@@ -11,9 +11,6 @@ See CLAUDE.md for design decisions and known quirks.
   reqwest 0.12, so both are compiled.  Watch for a `dxr_client` release that
   supports 0.13 (or consider whether we can vendor/patch it).
 
-- ~~**Add `cargo audit` to CI**~~ — done; separate `audit` job runs in parallel
-  with `test`; `build` will not proceed if audit fails.
-
 ---
 
 ## Configuration
@@ -73,13 +70,7 @@ See CLAUDE.md for design decisions and known quirks.
 
 ## Upstream / packaging
 
-- **Consider adding `cargo deny`** — `cargo deny check` enforces licence
-  compatibility and duplicate-crate detection.  The remaining duplicate is
-  reqwest 0.12/0.13 (dxr\_client vs ours); `cargo deny` would catch any
-  future regressions.
-
 - **Pi cross-compilation in CI** — `aarch64-unknown-linux-gnu` is present in
   `.cargo/config.toml` but not built in CI.  If BADARC ever deploys on a Pi,
   add a cross-build step (e.g. using `cross`) so breakage is caught early.
 
-- ~~**CHANGELOG**~~ — done; `CHANGELOG.md` added covering 0.3.0–0.4.2 and unreleased.
