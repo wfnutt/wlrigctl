@@ -1,14 +1,14 @@
-.PHONY: check fix fmt clippy test audit deny build deb clean
+.PHONY: ci fix fmt clippy test audit deny build deb clean
 
 # Run everything CI runs, in the same order.
 # This is the thing to run before pushing.
-check: fmt clippy test audit deny
+ci: fmt clippy test audit deny
 
-# Auto-fix formatting and clippy lint suggestions, then run the full check.
+# Auto-fix formatting and clippy lint suggestions, then run the full CI suite.
 fix:
 	cargo fmt
 	cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
-	$(MAKE) check
+	$(MAKE) ci
 
 fmt:
 	cargo fmt --check
