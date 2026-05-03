@@ -85,9 +85,10 @@ port = 54321
 #
 # NOTE: this only defends against browser-based attacks.  A local process with
 # raw network access can forge any HTTP header and bypass this check entirely.
-# If Docker is running on this machine, see the note in CLAUDE.md about
-# Docker's iptables DNAT rules — loopback binding alone does not prevent a
-# host-networked container from reaching this port.
+# If Docker is running on this machine, be aware that Docker's iptables DNAT
+# rules can expose loopback-bound ports to host-networked containers; the
+# loopback binding alone does not prevent a host-networked container from
+# reaching this port.
 #
 # wavelog_origin = "https://wavelog.example.org"
 
