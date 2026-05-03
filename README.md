@@ -19,6 +19,10 @@ Then I found Wavelog, and noticed that clrigctl also worked with it.
 offended my sensibilities; I wanted a low-overhead,
 always-running-when-I'm-logged-in daemon, not something with a UI.
 
+I also don't need to mess about with certs; I just want something running
+locally, on the same machine as wavelog, flrig, wsjtx. The machine is behind a
+firewall, and I only need to listen on 127.0.0.1.
+
 Fiddling about with this little bit of glue code has given me an excuse to try
 Rust and decode UDP packets from WSJT-X, which is a surprisingly powerful
 feature (you can send UDP datagrams in the reverse direction too...).
