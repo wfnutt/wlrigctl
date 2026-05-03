@@ -1,4 +1,4 @@
-.PHONY: check fix fmt clippy test audit deny
+.PHONY: check fix fmt clippy test audit deny build deb clean
 
 # Run everything CI runs, in the same order.
 # This is the thing to run before pushing.
@@ -24,3 +24,14 @@ audit:
 
 deny:
 	cargo deny check
+
+# Build the release binary (what CI and `make deb` produce).
+build:
+	cargo build --release
+
+# Build a .deb package.  Depends on build so the binary is always current.
+deb: build
+	cargo deb --no-build
+
+clean:
+	cargo clean
