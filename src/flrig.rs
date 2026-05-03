@@ -225,6 +225,13 @@ pub fn build_mode_map(cw: Option<&str>, rtty: Option<&str>, digital: Option<&str
     map
 }
 
+// Returns true when a follow-up set_narrow call is needed after set_mode.
+// Extracted as a pure function so the condition can be tested independently
+// of the async XMLRPC path.
+fn should_restore_narrow(mode: Mode, cwbandwidth: Option<u32>) -> bool {
+    cwbandwidth.is_some() && mode == Mode::CW
+}
+
 impl FLRig {
     pub fn new(settings: FlrigSettings, identifier: String) -> FLRig {
         let url = format!("{0}:{1}/", settings.host, settings.port);
@@ -332,11 +339,10 @@ impl FLRig {
         // Always restore narrow filter when targeting CW. Band memory may have
         // already switched the rig to CW (bypassing the change path above), so
         // set_narrow must not be inside the mode-change branch.
-        if let Some(cwbandwidth) = self.cwbandwidth {
-            if mode == Mode::CW {
-                info!("Bodging narrow filter on IC-703");
-                self.set_narrow(cwbandwidth as i32).await?;
-            }
+        if should_restore_narrow(mode, self.cwbandwidth) {
+            info!("Bodging narrow filter on IC-703");
+            let bw = self.cwbandwidth.unwrap(); // safe: predicate guarantees Some
+            self.set_narrow(bw as i32).await?;
         }
 
         Ok(())
