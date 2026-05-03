@@ -88,6 +88,17 @@ port = 54321
 #
 # wavelog_origin = "https://wavelog.example.org"
 
+# Frequency allowlist — UK deployments only, no config override.
+#
+# The CAT server rejects any QSY request whose frequency falls outside the
+# UK amateur allocations (Ofcom Tables A–C, Foundation licence baseline).
+# This is a hardcoded safety net: it prevents Wavelog from accidentally
+# QSYing a shared club radio to a non-amateur frequency.
+#
+# If you are deploying outside the UK, edit AMATEUR_BANDS_HZ in src/cat.rs
+# to match your national band plan.  There is no config override for this;
+# it is intentional that changing the band plan requires a recompile.
+
 # FT8 dial frequencies in Hz. When present this list replaces the built-in
 # defaults so you can update the band plan without recompiling.
 # The default list (used when this key is absent) is:

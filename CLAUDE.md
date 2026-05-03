@@ -109,6 +109,17 @@ section names `[CAT]` and `[WSJTX]` map to the snake_case Rust fields `cat` and
 `wsjtx`. Config files must use the uppercase names; lowercase `[cat]`/`[wsjtx]`
 will not deserialise.
 
+### CAT frequency allowlist is UK-only and has no config override (`cat.rs`)
+`AMATEUR_BANDS_HZ` enforces UK Ofcom amateur allocations (Foundation licence
+baseline, Tables A–C).  Any QSY request outside those ranges is rejected with
+400.  This is intentional: it prevents Wavelog from accidentally QSYing a shared
+club radio to a non-amateur frequency.
+
+There is no runtime config to override the band plan.  Non-UK deployments must
+edit `AMATEUR_BANDS_HZ` in `cat.rs` directly and recompile.  This is a
+deliberate design choice — requiring a recompile ensures the operator has read
+and understood the change rather than accidentally disabling the check.
+
 ### CORS headers on CAT responses
 Wavelog's bandmap makes HTTP requests from browser JavaScript, which requires
 CORS headers (`Access-Control-Allow-*`). Without them the browser blocks the
