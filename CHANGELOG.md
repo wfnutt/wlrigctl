@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Licence corrected from MIT to X11 (the upstream clrigctl licence was always X11)
 - GITHUB_TOKEN restricted to read-only by default in CI; `package` job retains write access for releases
+- Version bumped in preparation for next release (v0.4.3)
 
 ### Added
 - Makefile with `ci`, `fix`, `build`, `deb`, and `clean` targets for local development
@@ -17,6 +18,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Dependency footprint reduced; `ring` eliminated from the dependency tree
+
+### Security
+- openssl bump from 0.10.78 to 0.10.79
+- openssl-sys bump from 0.9.114 to 0.9.115
+- other crates per cargo update
 
 ---
 
