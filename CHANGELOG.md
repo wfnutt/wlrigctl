@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-05-07
+
+### Security
+- openssl bump from 0.10.78 to 0.10.79
+- openssl-sys bump from 0.9.114 to 0.9.115
+- other crates per cargo update
+
 ### Changed
 - Licence corrected from MIT to X11 (the upstream clrigctl licence was always X11)
 - GITHUB_TOKEN restricted to read-only by default in CI; `package` job retains write access for releases
@@ -18,11 +25,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Dependency footprint reduced; `ring` eliminated from the dependency tree
-
-### Security
-- openssl bump from 0.10.78 to 0.10.79
-- openssl-sys bump from 0.9.114 to 0.9.115
-- other crates per cargo update
 
 ---
 
