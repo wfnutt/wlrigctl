@@ -2,11 +2,10 @@ use crate::wavelog::RadioData;
 use log::{debug, info, warn};
 use serde::Deserialize;
 use std::fmt;
-use std::result::Result;
 use std::str::FromStr;
 
 use dxr::TryFromValue;
-use dxr_client::{Client, ClientBuilder, ClientError};
+use dxr_client::{Client, ClientBuilder};
 use url::Url;
 
 // Settings from .toml file
@@ -31,38 +30,31 @@ pub struct FLRig {
 }
 
 #[derive(Debug)]
-pub struct UnknownModeError {
-    pub msg: String,
-}
-
-impl fmt::Display for UnknownModeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "UnknownModeError: {0}", self.msg)
-    }
-}
-
-impl std::error::Error for UnknownModeError {}
-
-#[derive(Debug)]
 pub enum FlrigError {
-    DxrClient(ClientError),
-    UnknownMode(UnknownModeError),
+    Rpc(dxr_client::Error),
+    UnknownMode(String),
 }
 
 impl fmt::Display for FlrigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FlrigError::DxrClient(err) => write!(f, "DxrClient error: {}", err),
-            FlrigError::UnknownMode(err) => write!(f, "UnknownMode error: {}", err),
+            FlrigError::Rpc(e) => write!(f, "RPC error: {e}"),
+            FlrigError::UnknownMode(s) => write!(f, "unknown FLRig mode: {s}"),
         }
     }
 }
 
 impl std::error::Error for FlrigError {}
 
-impl From<ClientError> for FlrigError {
-    fn from(error: ClientError) -> Self {
-        FlrigError::DxrClient(error)
+impl From<dxr_client::Error> for FlrigError {
+    fn from(e: dxr_client::Error) -> Self {
+        FlrigError::Rpc(e)
+    }
+}
+
+impl From<dxr::Error> for FlrigError {
+    fn from(e: dxr::Error) -> Self {
+        FlrigError::Rpc(dxr_client::Error::from(e))
     }
 }
 
@@ -248,19 +240,19 @@ impl FLRig {
         }
     }
 
-    pub async fn get_mode(&self) -> Result<String, ClientError> {
+    pub async fn get_mode(&self) -> Result<String, FlrigError> {
         let response: String = self.client.call("rig.get_mode", ()).await?;
         Ok(response)
     }
 
-    pub async fn get_update(&self) -> Result<String, ClientError> {
+    pub async fn get_update(&self) -> Result<String, FlrigError> {
         let response: String = self.client.call("rig.get_update", ()).await?;
         Ok(response)
     }
 
     /// Fetch current radio state. Returns `None` when FLRig reports nothing has changed
     /// since the last poll (fast path), saving the multicall round-trip.
-    pub async fn get_radio_data(&self) -> Result<Option<RadioData>, ClientError> {
+    pub async fn get_radio_data(&self) -> Result<Option<RadioData>, FlrigError> {
         // Fast path: FLRig returns "NIL" when nothing has changed since the last call.
         // Note: FLRig always includes vol/mic/rfg in the response; "NIL" is only returned
         // when those controls are unsupported by the connected rig and nothing else changed.
@@ -282,10 +274,10 @@ impl FLRig {
         let mode_r = results.pop().expect("multicall result count mismatch");
         let vfo_r = results.pop().expect("multicall result count mismatch");
 
-        let vfo = String::try_from_value(&vfo_r.map_err(ClientError::from)?)?;
-        let mode_raw = String::try_from_value(&mode_r.map_err(ClientError::from)?)?;
-        let maxpwr = i32::try_from_value(&maxpwr_r.map_err(ClientError::from)?)?;
-        let power = i32::try_from_value(&power_r.map_err(ClientError::from)?)?;
+        let vfo = String::try_from_value(&vfo_r.map_err(|f| FlrigError::Rpc(f.into()))?)?;
+        let mode_raw = String::try_from_value(&mode_r.map_err(|f| FlrigError::Rpc(f.into()))?)?;
+        let maxpwr = i32::try_from_value(&maxpwr_r.map_err(|f| FlrigError::Rpc(f.into()))?)?;
+        let power = i32::try_from_value(&power_r.map_err(|f| FlrigError::Rpc(f.into()))?)?;
 
         let maxpwr_u = if maxpwr < 0 { 0u32 } else { maxpwr as u32 };
         let power_u = if power < 0 { 0u32 } else { power as u32 };
@@ -313,7 +305,7 @@ impl FLRig {
         }))
     }
 
-    pub async fn set_vfo(&self, freq_hz: f64) -> Result<(), ClientError> {
+    pub async fn set_vfo(&self, freq_hz: f64) -> Result<(), FlrigError> {
         let _response: String = self.client.call("rig.set_vfo", freq_hz).await?;
 
         Ok(())
@@ -328,11 +320,9 @@ impl FLRig {
 
         // Since we're converting the mode returned from FLRig's get_mode(), we have to handle the
         // prospect that a new mode is returned that is unknown to flrig::Mode
-        let existing_mode: Mode = existing_mode_str.parse::<Mode>().map_err(|_| {
-            FlrigError::UnknownMode(UnknownModeError {
-                msg: format!("mode {existing_mode_str} is unknown"),
-            })
-        })?;
+        let existing_mode: Mode = existing_mode_str
+            .parse::<Mode>()
+            .map_err(|_| FlrigError::UnknownMode(format!("mode {existing_mode_str} is unknown")))?;
 
         if mode != existing_mode {
             info!("calling rig.set_mode with mode:{mode}");
@@ -350,7 +340,7 @@ impl FLRig {
         Ok(())
     }
 
-    pub async fn set_narrow(&self, bw_index: i32) -> Result<(), ClientError> {
+    pub async fn set_narrow(&self, bw_index: i32) -> Result<(), FlrigError> {
         let _response: i32 = self.client.call("rig.set_bw", bw_index).await?;
 
         Ok(())
