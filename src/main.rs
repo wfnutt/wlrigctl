@@ -34,7 +34,7 @@ async fn shutdown_signal() {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), std::io::Error> {
     env_logger::init();
 
     let appname = env!("CARGO_PKG_NAME");

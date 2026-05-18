@@ -46,6 +46,17 @@ See CLAUDE.md for design decisions and known quirks.
 
 ---
 
+## Error type cleanup (dxr_client v0.8.0 — ClientError renamed to Error)
+
+- [x] `flrig.rs`: remove spurious `UnknownModeError` wrapper struct; fold message into `FlrigError::UnknownMode(String)`
+- [x] `flrig.rs`: replace `ClientError` import with `dxr_client::Error` by full path; rename variant `DxrClient` → `Rpc`
+- [x] `flrig.rs`: add `From<dxr::Error> for FlrigError` so `?` works on `try_from_value` results
+- [x] `flrig.rs`: all `FLRig` methods return `FlrigError` instead of leaking `dxr_client::Error`
+- [x] `cat.rs`: replace `Box<dyn std::error::Error + Send + Sync>` with `std::io::Error`
+- [x] `main.rs`: replace `Box<dyn std::error::Error + Send + Sync>` with `std::io::Error`
+
+---
+
 ## Code quality
 
 - **`cw_narrow_index` only matches `Mode::CW`** — the narrow filter bodge is

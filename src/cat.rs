@@ -323,7 +323,7 @@ pub async fn CAT_thread(
     settings: CatSettings,
     rig: &Arc<flrig::FLRig>,
     token: CancellationToken,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), std::io::Error> {
     // Listen on TCP socket for someone in Cloudlog/Wavelog clicking the bandmap
     let addr = SocketAddr::from((CAT_BIND_HOST, settings.port));
 
