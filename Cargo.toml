@@ -12,8 +12,8 @@ Based upon earlier work on clrigctl, by Martin Brodbeck, DG2SMB.
 [dependencies]
 bincode2 = "2.0.1"
 config = { version = "0.15.22", default-features = false, features = ["toml"] }
-dxr = { version = "0.7.1", features = ["multicall"] }
-dxr_client = { version = "0.7.1", features = ["reqwest", "multicall"] }
+dxr = { version = "0.8.0", features = ["multicall"] }
+dxr_client = { version = "0.8.0", features = ["reqwest", "multicall"] }
 env_logger = "0.10.1"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 home = "0.5.5"

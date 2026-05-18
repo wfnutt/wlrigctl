@@ -204,13 +204,12 @@ deny = [
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
 #
-# All entries below are rooted in dxr_client 0.7.1 pinning reqwest 0.12.
+# All entries below are rooted in dxr_client 0.8.0 pinning reqwest 0.12.
 # They will resolve automatically once dxr_client publishes reqwest 0.13 support.
 # See TODO.md "Unify reqwest versions".
 skip = [
-    { crate = "reqwest@0.12.28",      reason = "dxr_client 0.7.1 pins reqwest 0.12; blocked on upstream release" },
-    { crate = "thiserror@1.0.69",     reason = "dxr and dxr_client pin thiserror 1.x; follows from reqwest 0.12 lock" },
-    { crate = "thiserror-impl@1.0.69", reason = "proc-macro companion to thiserror 1.x; same root cause as thiserror skip" },
+    { crate = "reqwest@0.12.28",      reason = "dxr_client 0.8.0 pins reqwest 0.12; blocked on upstream release" },
+    { crate = "winnow@0.7.15",        reason = "dxr_client 0.8.0 pins winnow 0.7; blocked on upstream release" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
