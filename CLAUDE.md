@@ -63,10 +63,11 @@ FLRig mirrors whatever mode names the physical radio displays rather than
 providing a brand-agnostic interface.  The optional `cw_mode`, `rtty_mode` and
 `digital_mode` fields in `[CAT]` specify the exact FLRig mode strings to use for
 each concept.  All three default to ICOM/generic names (`CW`, `RTTY`, `D-USB`)
-when absent.  Examples: Yaesu needs `CW-U`/`RTTY-U`/`DATA-U`; newer ICOM rigs
-(IC-7300) need `USB-D`; Kenwood may need `FSK`; Elecraft uses `DATA`.  The
-`Mode` enum in `flrig.rs` covers all known variants; add new ones there if a
-future rig introduces an unfamiliar string.
+when absent.  Examples: Yaesu needs `CW-U`/`RTTY-U`/`DATA-U`; Kenwood TS-590SG
+needs `FSK` (rtty) and `USB-D` (digital/FT8); newer ICOM rigs (IC-7300) also
+use `USB-D` for digital; Elecraft uses `DATA`.  The `Mode` enum in `flrig.rs`
+covers all known variants; add new ones there if a future rig introduces an
+unfamiliar string.
 
 ### FT8 frequency detection is heuristic (cat.rs `is_ft8`)
 When Wavelog sends a CAT QSY request, the mode hint from the bandmap is

@@ -68,8 +68,9 @@ port = 54321
 # rtty_mode    = "RTTY-U"
 # digital_mode = "DATA-U"
 #
-#   Kenwood (RTTY reported as FSK):
+#   Kenwood TS-590SG and similar (RTTY=FSK, FT8/digital=USB-D):
 # rtty_mode    = "FSK"
+# digital_mode = "USB-D"
 #
 #   Newer ICOM (IC-7300, IC-7610 etc.):
 # digital_mode = "USB-D"

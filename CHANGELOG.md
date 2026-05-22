@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - dxr / dxr_client bumped to v0.8.0
 - cargo update
 
+### Fixed
+- Kenwood TS-590SG: `USB-D` (AFSK data mode) is now documented as the correct
+  `digital_mode` config value for FT8.  Previously only ICOM IC-7300 was cited
+  for this mode string; the `USB_D` enum comment and CLAUDE.md per-rig table
+  have been updated accordingly.
+- Tests: Kenwood mode-map coverage added to `cat.rs`
+  (`kenwood_ft8_digi_rtty_become_usb_d`, `kenwood_40m_digi_rtty_become_fsk`).
+
 ---
 
 ## [0.4.3] - 2026-05-07

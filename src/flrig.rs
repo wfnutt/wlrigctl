@@ -85,7 +85,7 @@ pub enum Mode {
     DATA_FMN,
     PSK,
     FSK,   // Kenwood RTTY
-    USB_D, // newer ICOM digital (e.g. IC-7300); cf. D-USB on IC-703
+    USB_D, // AFSK data mode: Kenwood (TS-590SG); newer ICOM (e.g. IC-7300); cf. D-USB on IC-703
     DATA,  // Elecraft generic data
 }
 

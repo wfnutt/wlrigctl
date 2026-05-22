@@ -607,6 +607,9 @@ mod tests {
     fn yaesu_mode_map() -> ModeMap {
         flrig::build_mode_map(Some("CW-U"), Some("RTTY-U"), Some("DATA-U"))
     }
+    fn kenwood_mode_map() -> ModeMap {
+        flrig::build_mode_map(Some("CW"), Some("FSK"), Some("USB-D"))
+    }
 
     //////////////////////////////////////////////////////////////
     // Tests for Bandlist/Cluster mode/frequency conversions (ICOM/generic map)
@@ -888,6 +891,40 @@ mod tests {
             wavelog_to_flrig_mode(29_600_000.0, WavelogMode::Fm, &DEFAULT_FT8_FREQS, &m),
             Mode::FM
         );
+    }
+
+    //////////////////////////////////////////////////////////////
+    // Tests for Kenwood mode map (CW→CW, RTTY→FSK, Digi/FT8→USB_D)
+    //////////////////////////////////////////////////////////////
+
+    #[test]
+    fn kenwood_ft8_digi_rtty_become_usb_d() {
+        const FT8_40M: f64 = 7_074_000.0;
+        let m = kenwood_mode_map();
+        assert_eq!(
+            wavelog_to_flrig_mode(FT8_40M, WavelogMode::Digi, &DEFAULT_FT8_FREQS, &m),
+            Mode::USB_D
+        );
+        assert_eq!(
+            wavelog_to_flrig_mode(FT8_40M, WavelogMode::Rtty, &DEFAULT_FT8_FREQS, &m),
+            Mode::USB_D
+        );
+    }
+
+    #[test]
+    fn kenwood_40m_digi_rtty_become_fsk() {
+        let m = kenwood_mode_map();
+        const BAND_40M: [f64; 3] = [7_000_000.0, 7_030_000.0, 7_200_000.0];
+        for freq in BAND_40M {
+            assert_eq!(
+                wavelog_to_flrig_mode(freq, WavelogMode::Digi, &DEFAULT_FT8_FREQS, &m),
+                Mode::FSK
+            );
+            assert_eq!(
+                wavelog_to_flrig_mode(freq, WavelogMode::Rtty, &DEFAULT_FT8_FREQS, &m),
+                Mode::FSK
+            );
+        }
     }
 
     //////////////////////////////////////////////////////////////
