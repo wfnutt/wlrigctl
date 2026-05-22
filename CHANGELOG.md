@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.4.4] - 2026-05-22
+
 ### Changed
 - dxr / dxr_client bumped to v0.8.0
 - cargo update
