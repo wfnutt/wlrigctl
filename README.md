@@ -27,9 +27,12 @@ Fiddling about with this little bit of glue code has given me an excuse to try
 Rust and decode UDP packets from WSJT-X, which is a surprisingly powerful
 feature (you can send UDP datagrams in the reverse direction too...).
 
-wlrigctl 0.4.4 onwards should now work with Icom, Yaesu and Kenwood transceivers. The revised config.toml should also permit use with other manufacturer's transceivers, assuming there's flrig support.
+wlrigctl 0.4.4 onwards should now work with Icom, Yaesu and Kenwood
+transceivers. The revised config.toml should also permit use with other
+manufacturers' transceivers, assuming there's flrig support.
 
-BADARC (Bedford and District Amateur Radio Club) has now been migrated to Wavelog. Mission accomplished.
+BADARC (Bedford and District Amateur Radio Club) has now been migrated to
+Wavelog. Mission accomplished.
 
 73 de Bill M7CLG
 
