@@ -27,11 +27,9 @@ Fiddling about with this little bit of glue code has given me an excuse to try
 Rust and decode UDP packets from WSJT-X, which is a surprisingly powerful
 feature (you can send UDP datagrams in the reverse direction too...).
 
-I make no warranty that the Rust code is idiomatic, or indeed any good(!)
-If you have an IC-703 with a narrow CW filter, you're in luck because that's
-the rig wlrigctl was developed against.
+wlrigctl 0.4.4 onwards should now work with Icom, Yaesu and Kenwood transceivers. The revised config.toml should also permit use with other manufacturer's transceivers, assuming there's flrig support.
 
-The eventual goal is to migrate the logging at the club (BADARC) to Wavelog.
+BADARC (Bedford and District Amateur Radio Club) has now been migrated to Wavelog. Mission accomplished.
 
 73 de Bill M7CLG
 
