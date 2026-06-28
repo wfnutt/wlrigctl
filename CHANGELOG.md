@@ -7,9 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.4.5] - 2026-06-28
+
 ### Security
 - cargo update to address https://rustsec.org/advisories/RUSTSEC-2026-0185, a
   DoS via oom in quinn-proto.
+
+### Fixed
+- cat: mode-aware band-edge enforcement with sideband bandwidth
+- cat: prevent use of forbidden frequency segment within 70cm allocation.
 
 ---
 
