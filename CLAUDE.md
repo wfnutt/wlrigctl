@@ -96,15 +96,36 @@ section names `[CAT]` and `[WSJTX]` map to the snake_case Rust fields `cat` and
 will not deserialise.
 
 ### CAT frequency allowlist is UK-only and has no config override (`cat.rs`)
-`AMATEUR_BANDS_HZ` enforces UK Ofcom amateur allocations (Foundation licence
-baseline, Tables A–C).  Any QSY request outside those ranges is rejected with
-400.  This is intentional: it prevents Wavelog from accidentally QSYing a shared
-club radio to a non-amateur frequency.
+`AMATEUR_BANDS_HZ` enumerates the UK Ofcom amateur allocations available to
+Foundation-class licensees (Tables A–C, with Full-only entries — 136 kHz,
+472 kHz, 5 MHz channels — excluded; see the source comment).
 
-There is no runtime config to override the band plan.  Non-UK deployments must
-edit `AMATEUR_BANDS_HZ` in `cat.rs` directly and recompile.  This is a
-deliberate design choice — requiring a recompile ensures the operator has read
-and understood the change rather than accidentally disabling the check.
+The check happens in two stages.  `parse_qsy_path` first enforces a soft
+sanity range (1.810 MHz – 440 MHz) covering everything wlrigctl supports;
+clearly out-of-scope inputs are rejected at parse time.  Then `qsy()`,
+after `wavelog_to_flrig_mode` has resolved the actual FLRig mode, calls
+`is_emission_in_band(freq, mode)` to perform the mode-aware band check.
+
+`is_emission_in_band` is mode-aware because the carrier alone is not
+enough: an SSB transmission occupies ~3 kHz on one side of the dial, AM
+and FM occupy both sides.  `mode_emission_offsets` returns the
+`(lower, upper)` Hz offsets for each mode family — SSB 3 kHz one-sided,
+AM/RTTY 3 kHz two-sided, narrow FM 6 kHz two-sided, CW 1 kHz two-sided
+buffer — and the check rejects unless the full
+`[dial − lower, dial + upper]` range fits inside a single
+`AMATEUR_BANDS_HZ` entry without overlapping any `FORBIDDEN_RANGES_HZ`
+entry.  The CW 1 kHz buffer also subsumes any CW pitch-offset on transmit
+(typically 600–800 Hz).
+
+`FORBIDDEN_RANGES_HZ` lists frequency ranges that are unconditionally
+refused regardless of mode or licence class.  Add entries only when there
+is a known restriction that must be enforced.
+
+There is no runtime config to override the band plan, the per-mode
+allowances or the forbidden ranges.  Non-UK deployments must edit these
+constants in `cat.rs` directly and recompile.  This is a deliberate
+design choice — requiring a recompile ensures the operator has read and
+understood the change rather than accidentally disabling the check.
 
 ### CORS headers on CAT responses
 Wavelog's bandmap makes HTTP requests from browser JavaScript, which requires

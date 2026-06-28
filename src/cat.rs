@@ -25,15 +25,14 @@ use crate::{flrig, flrig::Mode, flrig::ModeMap};
 
 const CAT_BIND_HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
 
-// UK amateur frequency allocations permitted across all licence classes
-// (Foundation as the common baseline), in Hz.
+// UK amateur frequency allocations available to Foundation-class licensees
+// (taken as the common baseline), in Hz.
 // Source: Ofcom Amateur Radio Licence Tables A–C, October 2025.
-// Excluded: 472–479 kHz (Full licence only) and the 5 MHz channels
-// (Full licence only, non-contiguous, specialist conditions).
+// Excluded: 135.7–137.8 kHz and 472–479 kHz (both non-Foundation) and the
+// 5 MHz channels (Full licence only, non-contiguous, specialist conditions).
 // Microwave bands above 70cm omitted; add entries here if a supported
 // rig needs them.
 const AMATEUR_BANDS_HZ: &[(u32, u32)] = &[
-    (135_700, 137_800),         // 136 kHz
     (1_810_000, 2_000_000),     // 160m
     (3_500_000, 3_800_000),     // 80m
     (7_000_000, 7_200_000),     // 40m
@@ -49,10 +48,59 @@ const AMATEUR_BANDS_HZ: &[(u32, u32)] = &[
     (430_000_000, 440_000_000), // 70cm
 ];
 
-fn is_amateur_frequency(freq_hz: u32) -> bool {
-    AMATEUR_BANDS_HZ
+// Hard-forbidden frequency ranges.  Any emission whose extended sideband
+// range overlaps an entry here is refused unconditionally, regardless of
+// mode or licence class.
+const FORBIDDEN_RANGES_HZ: &[(u32, u32)] = &[(431_000_000, 432_000_000)];
+
+// Soft sanity bounds for parse_qsy_path: anything outside this range is
+// out of scope for wlrigctl and rejected before mode resolution.  The
+// real band-and-mode check happens in is_emission_in_band.
+// Lower: bottom of 160m (lowest Foundation allocation).
+// Upper: top of 70cm (highest band wlrigctl supports).
+const MIN_PLAUSIBLE_FREQ_HZ: u32 = 1_810_000;
+const MAX_PLAUSIBLE_FREQ_HZ: u32 = 440_000_000;
+
+fn is_plausible_radio_frequency(freq_hz: u32) -> bool {
+    (MIN_PLAUSIBLE_FREQ_HZ..=MAX_PLAUSIBLE_FREQ_HZ).contains(&freq_hz)
+}
+
+// Per-mode emission bandwidth offsets from the dial frequency, in Hz.
+// Returns (lower_offset, upper_offset) such that emitted energy occupies
+// [dial - lower_offset, dial + upper_offset].  Conservative envelopes:
+// SSB rounded up to 3 kHz, narrow FM to 6 kHz, RTTY two-sided (per-rig
+// sideband convention varies), CW gets a 1 kHz buffer at each band edge
+// — the operator must consciously nudge the dial if they want closer.
+// The 1 kHz CW buffer also subsumes any CW pitch-offset on transmit
+// (typically 600–800 Hz on rigs that apply it).
+fn mode_emission_offsets(mode: Mode) -> (u32, u32) {
+    use Mode::*;
+    match mode {
+        LSB | D_LSB | DATA_L => (3_000, 0),
+        USB | D_USB | DATA_U | USB_D | DATA | PSK => (0, 3_000),
+        AM | AM_N => (3_000, 3_000),
+        FM | FM_N | DATA_FM | DATA_FMN => (6_000, 6_000),
+        RTTY | RTTY_U | RTTY_L | RTTY_R | FSK => (3_000, 3_000),
+        CW | CW_U | CW_L | CW_R => (1_000, 1_000),
+    }
+}
+
+// Returns true iff the full mode-aware occupied-emission range fits inside
+// a single amateur-band allocation AND does not overlap any forbidden range.
+fn is_emission_in_band(freq_hz: u32, mode: Mode) -> bool {
+    let (lo_off, hi_off) = mode_emission_offsets(mode);
+    let lower_emission = freq_hz.saturating_sub(lo_off);
+    let upper_emission = freq_hz.saturating_add(hi_off);
+
+    let in_amateur_band = AMATEUR_BANDS_HZ
         .iter()
-        .any(|&(lo, hi)| freq_hz >= lo && freq_hz <= hi)
+        .any(|&(lo, hi)| lower_emission >= lo && upper_emission <= hi);
+
+    let touches_forbidden = FORBIDDEN_RANGES_HZ
+        .iter()
+        .any(|&(lo, hi)| lower_emission <= hi && lo <= upper_emission);
+
+    in_amateur_band && !touches_forbidden
 }
 
 #[derive(Debug, Deserialize)]
@@ -203,10 +251,10 @@ fn parse_qsy_path<B>(req: &Request<B>) -> Result<Qsy, Box<HttpResponse>> {
         ))
     })?;
 
-    if !is_amateur_frequency(freq) {
+    if !is_plausible_radio_frequency(freq) {
         return Err(Box::new(http_err_str(
             StatusCode::BAD_REQUEST,
-            format!("{freq} Hz is outside permitted UK amateur allocations"),
+            format!("{freq} Hz is outside the supported amateur frequency range"),
         )));
     }
 
@@ -284,6 +332,22 @@ async fn qsy(
     let freq: f64 = qsyinfo.freq;
 
     let mode = wavelog_to_flrig_mode(freq, qsyinfo.mode, &ft8_freqs, &mode_map);
+
+    // Mode-aware band-edge check: reject if any part of the occupied
+    // sideband bandwidth would fall outside UK amateur allocations or
+    // touch a forbidden range.
+    let freq_u32 = freq as u32;
+    if !is_emission_in_band(freq_u32, mode) {
+        let (lo_off, hi_off) = mode_emission_offsets(mode);
+        let lower = freq_u32.saturating_sub(lo_off);
+        let upper = freq_u32.saturating_add(hi_off);
+        return Ok(http_err_str(
+            StatusCode::BAD_REQUEST,
+            format!(
+                "{mode} at {freq_u32} Hz emits {lower}-{upper} Hz, outside permitted UK amateur allocations"
+            ),
+        ));
+    }
 
     if let Err(e) = rig.set_vfo(freq).await {
         return Ok(http_err_str(
@@ -966,7 +1030,7 @@ mod tests {
         assert!(parse_qsy_path(&make_get("/14030000/cw/extra")).is_err());
     }
 
-    // --- Frequency allowlist: out-of-band inputs rejected ---
+    // --- parse_qsy_path: soft sanity range rejects clearly out-of-scope inputs ---
 
     #[test]
     fn qsy_rejects_zero_frequency() {
@@ -978,7 +1042,7 @@ mod tests {
 
     #[test]
     fn qsy_rejects_broadcast_band_frequency() {
-        // 909 kHz is an AM broadcast frequency, not an amateur allocation.
+        // 909 kHz is an AM broadcast frequency, well below the 160m lower edge.
         assert!(
             parse_qsy_path(&make_get("/909000/usb")).is_err(),
             "broadcast-band frequency 909 kHz must be rejected"
@@ -987,23 +1051,18 @@ mod tests {
 
     #[test]
     fn qsy_rejects_max_u32_frequency() {
-        // 4,294,967,295 Hz (~4.3 GHz) is not an amateur allocation.
+        // 4,294,967,295 Hz (~4.3 GHz) is far above the 70cm upper edge.
         assert!(
             parse_qsy_path(&make_get("/4294967295/usb")).is_err(),
             "out-of-range frequency 4294967295 Hz must be rejected"
         );
     }
 
-    #[test]
-    fn qsy_rejects_between_bands() {
-        // 11 MHz falls between 30m (10.15 MHz) and 20m (14.0 MHz).
-        assert!(
-            parse_qsy_path(&make_get("/11000000/usb")).is_err(),
-            "inter-band frequency 11 MHz must be rejected"
-        );
-    }
-
-    // --- Frequency allowlist: valid in-band inputs accepted ---
+    // --- parse_qsy_path: valid wire-format inputs accepted ---
+    //
+    // Note: parse_qsy_path is now a pure parser plus a soft sanity range.
+    // Between-band frequencies (e.g. 11 MHz) and band-edge sideband issues
+    // are caught later by is_emission_in_band; see the emission tests below.
 
     #[test]
     fn qsy_accepts_valid_hf_frequencies() {
@@ -1027,38 +1086,368 @@ mod tests {
         }
     }
 
-    // --- is_amateur_frequency: band edge boundary checks ---
+    //////////////////////////////////////////////////////////////
+    // Tests for is_plausible_radio_frequency (sanity range)
+    //////////////////////////////////////////////////////////////
 
     #[test]
-    fn amateur_frequency_band_edges() {
-        // Lower and upper edges of each band must be accepted (inclusive).
-        for &(lo, hi) in AMATEUR_BANDS_HZ {
+    fn sanity_rejects_zero() {
+        assert!(!is_plausible_radio_frequency(0));
+    }
+
+    #[test]
+    fn sanity_rejects_just_below_160m() {
+        // Foundation cannot access anything below the 160m band lower edge.
+        assert!(!is_plausible_radio_frequency(1_809_999));
+    }
+
+    #[test]
+    fn sanity_accepts_160m_lower_edge() {
+        assert!(is_plausible_radio_frequency(1_810_000));
+    }
+
+    #[test]
+    fn sanity_accepts_70cm_upper_edge() {
+        assert!(is_plausible_radio_frequency(440_000_000));
+    }
+
+    #[test]
+    fn sanity_rejects_above_70cm() {
+        assert!(!is_plausible_radio_frequency(440_000_001));
+        assert!(!is_plausible_radio_frequency(1_000_000_000));
+        assert!(!is_plausible_radio_frequency(u32::MAX));
+    }
+
+    //////////////////////////////////////////////////////////////
+    // Tests for mode_emission_offsets
+    //////////////////////////////////////////////////////////////
+
+    #[test]
+    fn offsets_lsb_family_one_sided_below() {
+        assert_eq!(mode_emission_offsets(Mode::LSB), (3_000, 0));
+        assert_eq!(mode_emission_offsets(Mode::D_LSB), (3_000, 0));
+        assert_eq!(mode_emission_offsets(Mode::DATA_L), (3_000, 0));
+    }
+
+    #[test]
+    fn offsets_usb_family_one_sided_above() {
+        assert_eq!(mode_emission_offsets(Mode::USB), (0, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::D_USB), (0, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::DATA_U), (0, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::USB_D), (0, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::DATA), (0, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::PSK), (0, 3_000));
+    }
+
+    #[test]
+    fn offsets_am_symmetric_3k() {
+        assert_eq!(mode_emission_offsets(Mode::AM), (3_000, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::AM_N), (3_000, 3_000));
+    }
+
+    #[test]
+    fn offsets_fm_symmetric_6k() {
+        assert_eq!(mode_emission_offsets(Mode::FM), (6_000, 6_000));
+        assert_eq!(mode_emission_offsets(Mode::FM_N), (6_000, 6_000));
+        assert_eq!(mode_emission_offsets(Mode::DATA_FM), (6_000, 6_000));
+        assert_eq!(mode_emission_offsets(Mode::DATA_FMN), (6_000, 6_000));
+    }
+
+    #[test]
+    fn offsets_rtty_symmetric_3k() {
+        assert_eq!(mode_emission_offsets(Mode::RTTY), (3_000, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::RTTY_U), (3_000, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::RTTY_L), (3_000, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::RTTY_R), (3_000, 3_000));
+        assert_eq!(mode_emission_offsets(Mode::FSK), (3_000, 3_000));
+    }
+
+    #[test]
+    fn offsets_cw_family_one_kilohertz_buffer() {
+        assert_eq!(mode_emission_offsets(Mode::CW), (1_000, 1_000));
+        assert_eq!(mode_emission_offsets(Mode::CW_U), (1_000, 1_000));
+        assert_eq!(mode_emission_offsets(Mode::CW_L), (1_000, 1_000));
+        assert_eq!(mode_emission_offsets(Mode::CW_R), (1_000, 1_000));
+    }
+
+    //////////////////////////////////////////////////////////////
+    // Tests for is_emission_in_band
+    //////////////////////////////////////////////////////////////
+
+    // LSB: emission below the dial; sensitive to band lower edge.
+
+    #[test]
+    fn emission_lsb_at_lower_edge_rejected() {
+        for &(lo, _hi) in AMATEUR_BANDS_HZ {
             assert!(
-                is_amateur_frequency(lo),
-                "{lo} Hz (band lower edge) should be accepted"
-            );
-            assert!(
-                is_amateur_frequency(hi),
-                "{hi} Hz (band upper edge) should be accepted"
+                !is_emission_in_band(lo, Mode::LSB),
+                "LSB at {lo} (band lower edge) should be rejected — emission falls below"
             );
         }
     }
 
     #[test]
-    fn amateur_frequency_outside_all_bands_rejected() {
-        let out_of_band = [
-            0,             // zero
-            100_000,       // below 136 kHz band
-            500_000,       // 500 kHz (between 136 kHz and 160m)
-            472_000,       // 472 kHz (Full-only, excluded by policy)
-            5_000_000,     // 5 MHz (Full-only specialist channels, excluded by policy)
-            11_000_000,    // between 30m and 20m
-            200_000_000,   // between 70cm and anything above
-            4_294_967_295, // max u32
-        ];
-        for freq in out_of_band {
-            assert!(!is_amateur_frequency(freq), "{freq} Hz should be rejected");
+    fn emission_lsb_at_lower_edge_plus_3khz_accepted() {
+        for &(lo, _hi) in AMATEUR_BANDS_HZ {
+            let dial = lo + 3_000;
+            assert!(
+                is_emission_in_band(dial, Mode::LSB),
+                "LSB at {dial} (= lower edge + 3 kHz) should be accepted"
+            );
         }
+    }
+
+    #[test]
+    fn emission_lsb_at_upper_edge_accepted() {
+        for &(_lo, hi) in AMATEUR_BANDS_HZ {
+            assert!(
+                is_emission_in_band(hi, Mode::LSB),
+                "LSB at {hi} (band upper edge) should be accepted — emission stays below"
+            );
+        }
+    }
+
+    // USB: emission above the dial; sensitive to band upper edge.
+
+    #[test]
+    fn emission_usb_at_upper_edge_rejected() {
+        for &(_lo, hi) in AMATEUR_BANDS_HZ {
+            assert!(
+                !is_emission_in_band(hi, Mode::USB),
+                "USB at {hi} (band upper edge) should be rejected — emission falls above"
+            );
+        }
+    }
+
+    #[test]
+    fn emission_usb_at_upper_edge_minus_3khz_accepted() {
+        for &(_lo, hi) in AMATEUR_BANDS_HZ {
+            let dial = hi - 3_000;
+            assert!(
+                is_emission_in_band(dial, Mode::USB),
+                "USB at {dial} (= upper edge - 3 kHz) should be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn emission_usb_at_lower_edge_accepted() {
+        for &(lo, _hi) in AMATEUR_BANDS_HZ {
+            assert!(
+                is_emission_in_band(lo, Mode::USB),
+                "USB at {lo} (band lower edge) should be accepted — emission stays above"
+            );
+        }
+    }
+
+    // AM and RTTY: two-sided 3 kHz; both edges rejected.
+
+    #[test]
+    fn emission_am_at_band_edges_rejected() {
+        for &(lo, hi) in AMATEUR_BANDS_HZ {
+            assert!(
+                !is_emission_in_band(lo, Mode::AM),
+                "AM at {lo} (band lower edge) should be rejected"
+            );
+            assert!(
+                !is_emission_in_band(hi, Mode::AM),
+                "AM at {hi} (band upper edge) should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn emission_rtty_at_band_edges_rejected() {
+        for &(lo, hi) in AMATEUR_BANDS_HZ {
+            assert!(
+                !is_emission_in_band(lo, Mode::RTTY),
+                "RTTY at {lo} (band lower edge) should be rejected"
+            );
+            assert!(
+                !is_emission_in_band(hi, Mode::RTTY),
+                "RTTY at {hi} (band upper edge) should be rejected"
+            );
+        }
+    }
+
+    // FM: two-sided 6 kHz.  10m FM upper edge is the canonical example.
+
+    #[test]
+    fn emission_fm_29700khz_rejected_29694khz_accepted() {
+        assert!(!is_emission_in_band(29_700_000, Mode::FM));
+        assert!(is_emission_in_band(29_694_000, Mode::FM));
+    }
+
+    // CW: 1 kHz buffer at each band edge.
+
+    #[test]
+    fn emission_cw_at_band_edges_rejected() {
+        for &(lo, hi) in AMATEUR_BANDS_HZ {
+            assert!(
+                !is_emission_in_band(lo, Mode::CW),
+                "CW at {lo} (band lower edge) should be rejected (1 kHz margin)"
+            );
+            assert!(
+                !is_emission_in_band(hi, Mode::CW),
+                "CW at {hi} (band upper edge) should be rejected (1 kHz margin)"
+            );
+        }
+    }
+
+    #[test]
+    fn emission_cw_one_kilohertz_inside_band_accepted() {
+        for &(lo, hi) in AMATEUR_BANDS_HZ {
+            assert!(
+                is_emission_in_band(lo + 1_000, Mode::CW),
+                "CW at lower+1 kHz of {lo} should be accepted"
+            );
+            assert!(
+                is_emission_in_band(hi - 1_000, Mode::CW),
+                "CW at upper-1 kHz of {hi} should be accepted"
+            );
+        }
+    }
+
+    // FT8 dial frequencies are well inside their bands for every digital mode.
+
+    #[test]
+    fn emission_ft8_dials_accepted() {
+        let dials = [
+            1_840_000, 3_575_000, 7_074_000, 10_136_000, 14_074_000, 18_100_000, 21_074_000,
+            24_915_000, 28_074_000, 50_313_000,
+        ];
+        for dial in dials {
+            for mode in [Mode::D_USB, Mode::DATA_U, Mode::USB_D, Mode::DATA] {
+                assert!(
+                    is_emission_in_band(dial, mode),
+                    "{mode:?} at {dial} (FT8 dial) should be accepted"
+                );
+            }
+        }
+    }
+
+    // Inter-band frequencies — caught here now, not by parse_qsy_path.
+
+    #[test]
+    fn emission_between_bands_rejected() {
+        // 11 MHz is between 30m (10.15 MHz) and 20m (14.0 MHz).
+        for mode in [Mode::USB, Mode::LSB, Mode::CW, Mode::AM, Mode::FM] {
+            assert!(
+                !is_emission_in_band(11_000_000, mode),
+                "{mode:?} at 11 MHz (between 30m and 20m) should be rejected"
+            );
+        }
+    }
+
+    //////////////////////////////////////////////////////////////
+    // Tests for the forbidden range
+    //////////////////////////////////////////////////////////////
+
+    #[test]
+    fn emission_inside_forbidden_range_rejected() {
+        for freq in [431_000_000, 431_500_000, 432_000_000] {
+            for mode in [Mode::USB, Mode::LSB, Mode::CW, Mode::FM] {
+                assert!(
+                    !is_emission_in_band(freq, mode),
+                    "{mode:?} at {freq} (inside forbidden range) should be rejected"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn emission_sideband_touching_forbidden_range_rejected() {
+        // USB at 430_998_000: emission upper = 431_001_000 → overlaps lower edge
+        assert!(!is_emission_in_band(430_998_000, Mode::USB));
+        // LSB at 432_001_000: emission lower = 431_998_000 → overlaps upper edge
+        assert!(!is_emission_in_band(432_001_000, Mode::LSB));
+        // CW at 430_999_999: emission upper = 431_000_999 → overlaps lower edge
+        assert!(!is_emission_in_band(430_999_999, Mode::CW));
+    }
+
+    #[test]
+    fn emission_clear_of_forbidden_range_accepted() {
+        // USB at 430_995_000: emission 430_995_000-430_998_000 — clear below
+        assert!(is_emission_in_band(430_995_000, Mode::USB));
+        // LSB at 432_004_000: emission 432_001_000-432_004_000 — clear above
+        assert!(is_emission_in_band(432_004_000, Mode::LSB));
+    }
+
+    //////////////////////////////////////////////////////////////
+    // End-to-end path checks: parse + mode-map + emission
+    //////////////////////////////////////////////////////////////
+
+    // Compose the chain the real qsy() handler walks: parse the path,
+    // resolve the FLRig mode, then check emission against the band plan.
+    // Returns false if any step would refuse the request.
+    fn would_emit_in_band(path: &str, mode_map: &ModeMap) -> bool {
+        let req = make_get(path);
+        let Ok(qsy) = parse_qsy_path(&req) else {
+            return false;
+        };
+        let mode = wavelog_to_flrig_mode(qsy.freq, qsy.mode, &DEFAULT_FT8_FREQS, mode_map);
+        is_emission_in_band(qsy.freq as u32, mode)
+    }
+
+    #[test]
+    fn path_phone_at_80m_lower_edge_rejected() {
+        // /3500000/phone resolves to LSB on 80m; emission below the lower edge.
+        assert!(!would_emit_in_band("/3500000/phone", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_lsb_at_80m_lower_edge_rejected() {
+        assert!(!would_emit_in_band("/3500000/lsb", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_usb_at_80m_lower_edge_accepted() {
+        // USB at the lower edge: emission stays above the dial, safely in band.
+        assert!(would_emit_in_band("/3500000/usb", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_phone_at_20m_upper_edge_rejected() {
+        // /14350000/phone resolves to USB on 20m; emission above the upper edge.
+        assert!(!would_emit_in_band("/14350000/phone", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_usb_at_20m_upper_edge_rejected() {
+        assert!(!would_emit_in_band("/14350000/usb", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_lsb_at_20m_upper_edge_accepted() {
+        // Operationally unusual but technically safe.
+        assert!(would_emit_in_band("/14350000/lsb", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_ft8_dial_accepted() {
+        assert!(would_emit_in_band("/7074000/digi", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_fm_at_10m_upper_edge_rejected() {
+        assert!(!would_emit_in_band("/29700000/fm", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_cw_at_80m_lower_edge_rejected() {
+        // CW has a 1 kHz margin from band edges.
+        assert!(!would_emit_in_band("/3500000/cw", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_cw_one_kilohertz_inside_80m_accepted() {
+        assert!(would_emit_in_band("/3501000/cw", &icom_mode_map()));
+    }
+
+    #[test]
+    fn path_inside_forbidden_range_rejected() {
+        // 431.5 MHz is inside the unconditional forbidden range.
+        assert!(!would_emit_in_band("/431500000/usb", &icom_mode_map()));
     }
 
     //////////////////////////////////////////////////////////////
