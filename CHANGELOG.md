@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- cargo update to address https://rustsec.org/advisories/RUSTSEC-2026-0185, a
+  DoS via oom in quinn-proto.
+
 ---
 
 ## [0.4.4] - 2026-05-22
